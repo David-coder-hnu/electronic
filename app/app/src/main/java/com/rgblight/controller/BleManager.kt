@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.UUID
 
 /**
- * Bluetooth Manager for CH9143 BLE module.
+ * BLE Manager for CH9143 Bluetooth module.
  *
  * CH9143 uses BLE GATT with a custom service for UART transparent transmission.
  * Service UUID (WCH BLE UART):     0000ffe0-0000-1000-8000-00805f9b34fb
@@ -26,18 +26,19 @@ import java.util.UUID
  *
  * If using WCH official BleUart SDK, replace this class with BleUartManager from the SDK.
  */
-class BluetoothManager(private val context: Context) {
+class BleManager(private val context: Context) {
 
     companion object {
         val SERVICE_UUID: UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
         val CHAR_TX_UUID: UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb")
         val CHAR_RX_UUID: UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb")
-        const val TAG = "BtManager"
+        const val TAG = "BleManager"
     }
 
     private val btAdapter: BluetoothAdapter? by lazy {
-        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
-            ?.adapter
+        // Fully-qualified cast to avoid shadowing this custom class
+        (context.getSystemService(Context.BLUETOOTH_SERVICE)
+            as? android.bluetooth.BluetoothManager)?.adapter
     }
 
     private var btGatt: BluetoothGatt? = null

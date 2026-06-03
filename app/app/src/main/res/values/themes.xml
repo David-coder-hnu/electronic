@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark theme matching APP-UI-DESIGN-SPEC.md palette -->
+    <style name="Theme.Material3.Dark.NoActionBar" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#FF6C5CE7</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorSurface">#FF0F0F14</item>
+        <item name="colorOnSurface">#FFF0F0F5</item>
+        <item name="colorError">#FFFF6B6B</item>
+        <item name="android:statusBarColor">#FF0F0F14</item>
+        <item name="android:navigationBarColor">#FF0F0F14</item>
+        <item name="android:windowBackground">#FF0F0F14</item>
+    </style>
+</resources>

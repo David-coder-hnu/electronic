@@ -28,7 +28,7 @@ data class RgbColor(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    val btManager = BluetoothManager(application)
+    val btManager = BleManager(application)
     private val sceneRepo = SceneRepository(application)
 
     // ── Color state ──
@@ -49,7 +49,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _brightness = MutableStateFlow(100)
     val brightness: StateFlow<Int> = _brightness.asStateFlow()
 
-    // ── Bluetooth (delegated to BluetoothManager flows) ──
+    // ── Bluetooth (delegated to BleManager flows) ──
 
     val devices: StateFlow<List<BtDevice>> = btManager.devices
     val isScanning: StateFlow<Boolean> = btManager.isScanning

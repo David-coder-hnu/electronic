@@ -1,31 +1,14 @@
-# Quartus Prime Project File
-# RGB Bluetooth LED Controller — Cyclone IV EP4CE15F17C8
-# Generated: 2026-06-03
+# -------------------------------------------------------------------------- #
+#
+# Quartus II
+# Version 13.0.1 Build 232 06/12/2013 Service Pack 1 SJ Web Edition
+# Copyright (C) 1991-2013 Altera Corporation. All rights reserved.
+#
+# -------------------------------------------------------------------------- #
 
-# Project info
+QUARTUS_VERSION = "13.0"
+DATE = "15:30:00  JUNE 03, 2026"
+
+# Revisions
+
 PROJECT_REVISION = "rgb_controller"
-PROJECT_OUTPUT_DIRECTORY = output_files
-TOP_LEVEL_ENTITY = rgb_controller_top
-FAMILY = "Cyclone IV E"
-DEVICE = EP4CE15F17C8
-
-# RTL source files (relative to project directory)
-SOURCE_FILE = "../rtl/rgb_controller_top.v"
-SOURCE_FILE = "../rtl/uart_rx.v"
-SOURCE_FILE = "../rtl/uart_tx.v"
-SOURCE_FILE = "../rtl/cmd_decoder.v"
-SOURCE_FILE = "../rtl/effect_engine.v"
-SOURCE_FILE = "../rtl/pwm_generator.v"
-
-# Testbench sources (simulation only)
-SIM_SOURCE_FILE = "../tb/uart_rx_tb.v"
-SIM_SOURCE_FILE = "../tb/effect_engine_tb.v"
-SIM_SOURCE_FILE = "../tb/pwm_tb.v"
-
-# EDA Tool Settings
-EDA_SIMULATION_TOOL = "ModelSim-Altera (Verilog)"
-EDA_OUTPUT_DATA_FORMAT = "VERILOG HDL"
-EDA_TIME_SCALE = "1 ns"
-
-# Compilation
-AUTO_RESTART = ON

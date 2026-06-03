@@ -22,6 +22,21 @@ set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 
 # ============================================================================
+# Verilog Source Files
+# ============================================================================
+set_global_assignment -name VERILOG_FILE ../rtl/rgb_controller_top.v
+set_global_assignment -name VERILOG_FILE ../rtl/uart_rx.v
+set_global_assignment -name VERILOG_FILE ../rtl/uart_tx.v
+set_global_assignment -name VERILOG_FILE ../rtl/cmd_decoder.v
+set_global_assignment -name VERILOG_FILE ../rtl/effect_engine.v
+set_global_assignment -name VERILOG_FILE ../rtl/pwm_generator.v
+
+# ============================================================================
+# SDC Timing Constraints
+# ============================================================================
+set_global_assignment -name SDC_FILE rgb_controller.sdc
+
+# ============================================================================
 # Clock & Reset
 # ============================================================================
 
@@ -159,11 +174,6 @@ set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 8
 #
 # NOTE: SignalTap uses on-chip RAM for the sample buffer.
 # EP4CE15 has 504Kbit RAM. 2K depth x 32 signals ≈ 64Kbit, well within budget.
-
-# ============================================================================
-# Timing constraints (see rgb_controller.sdc)
-# ============================================================================
-set_global_assignment -name SDC_FILE rgb_controller.sdc
 
 # ============================================================================
 # Compilation optimization

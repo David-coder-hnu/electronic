@@ -16,7 +16,7 @@ local.properties
 .project
 .settings/
 
-# Quartus / FPGA
+# Quartus / FPGA — build outputs only (project source .qpf/.qsf are tracked)
 db/
 incremental_db/
 output_files/
@@ -31,9 +31,11 @@ simulation/
 *.done
 *.rpt
 *.pin
-*.qsf
-*.qpf
+*.cdf
+*.stp
 hw_image/
+greybox_tmp/
+*.qarlog
 
 # ModelSim
 work/

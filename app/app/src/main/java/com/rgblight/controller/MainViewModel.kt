@@ -65,7 +65,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastSentHex = MutableStateFlow("#FF0000")
     val lastSentHex: StateFlow<String> = _lastSentHex.asStateFlow()
 
-    private val _sendFeedback = MutableStateFlow(false)  // true → "已发送 ✓" for 0.5s
+    private val _sendFeedback = MutableStateFlow(false)  // true → shows sent confirmation for 0.5s
     val sendFeedback: StateFlow<Boolean> = _sendFeedback.asStateFlow()
 
     init {
@@ -131,7 +131,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             (rgb.value.b * 255).toInt()
         )
 
-        // "已发送 ✓" feedback for 0.5s
+        // Show sent confirmation for 0.5s
         _sendFeedback.value = true
         viewModelScope.launch {
             kotlinx.coroutines.delay(500)

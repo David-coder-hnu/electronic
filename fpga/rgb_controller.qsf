@@ -1,0 +1,192 @@
+# ============================================================================
+# Quartus Prime Settings File — RGB Bluetooth LED Controller
+# Device: Cyclone IV E — EP4CE15F17C8 (256-pin FBGA)
+# Top-level: rgb_controller_top
+# ============================================================================
+#
+# NOTE — Pin Verification Required
+# The pin assignments below are based on a typical EP4CE15 university
+# dev board. PMOD pin mappings differ between board vendors. Verify
+# every pin against your board's schematic in Quartus Pin Planner.
+# If a pin differs, change only the assignment — the Verilog stays the same.
+# ============================================================================
+
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE15F17C8
+set_global_assignment -name TOP_LEVEL_ENTITY rgb_controller_top
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION "13.0 SP1"
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "15:30:00  JUNE 03, 2026"
+set_global_assignment -name LAST_QUARTUS_VERSION "13.0 SP1"
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+
+# ============================================================================
+# Clock & Reset
+# ============================================================================
+
+# 50MHz on-board oscillator → PIN_E1
+# [VERIFY] Scope the oscillator output to confirm 50MHz
+set_location_assignment PIN_E1 -to clk_50m
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to clk_50m
+
+# Reset button (active-low)
+# [VERIFY] KEY0 on dev board: pressed = GND, released = pull-up
+set_location_assignment PIN_M2 -to rst_n
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to rst_n
+# Buttons typically lack hardware debounce; 2-stage synchronizer
+# is handled inside each module.
+
+# ============================================================================
+# PMOD-A — CH9143 BLE Module (UART + BLESTA status)
+# ============================================================================
+#
+# CH9143 wiring (5 lines):
+#   VCC(3.3V) → PMOD-A Pin6 or VCC header — no FPGA pin needed
+#   GND       → PMOD-A Pin5 or GND header — no FPGA pin needed
+#   TXD       → PMOD-A Pin2 → FPGA RX  ← cross-connected!
+#   RXD       → PMOD-A Pin1 → FPGA TX  ← cross-connected!
+#   BLESTA    → PMOD-A Pin3 → FPGA GPIO (connection status, high=connected)
+#
+# [VERIFY] Locate PMOD-A pins on your board schematic and adjust.
+
+# PMOD-A Pin2 — CH9143 TXD → FPGA RX (uart_rx)
+set_location_assignment PIN_N1 -to pmod_a_rx
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_a_rx
+
+# PMOD-A Pin1 — FPGA TX → CH9143 RXD (uart_tx)
+set_location_assignment PIN_P2 -to pmod_a_tx
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_a_tx
+
+# PMOD-A Pin3 — CH9143 BLESTA connection status (input)
+set_location_assignment PIN_N2 -to pmod_a_blesta
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_a_blesta
+
+# ============================================================================
+# PMOD-B — RGB LED Board (8 IO: 6 PWM + 2 reserved)
+# ============================================================================
+#
+# PMOD-B Pin  |  FPGA Pin  |  Signal    | Description
+# ------------+------------+------------+--------------------
+# Pin 1 IO[0] | PIN_K1     | pmod_b_io0 | LED1_R PWM
+# Pin 2 IO[1] | PIN_K2     | pmod_b_io1 | LED1_G PWM
+# Pin 3 IO[2] | PIN_L1     | pmod_b_io2 | LED1_B PWM
+# Pin 4 IO[3] | PIN_L2     | pmod_b_io3 | LED2_R PWM
+# Pin 5 IO[4] | PIN_J1     | pmod_b_io4 | LED2_G PWM
+# Pin 6 IO[5] | PIN_J2     | pmod_b_io5 | LED2_B PWM
+# Pin 7 IO[6] | PIN_G1     | pmod_b_io6 | LED3_R (reserved)
+# Pin 8 IO[7] | PIN_G2     | pmod_b_io7 | LED3_G (reserved)
+# Pin 9  VCC  | —          | —          | 3.3V power
+# Pin 10 GND  | —          | —          | Ground
+# Pin 11 GND  | —          | —          | Ground
+# Pin 12 VCC  | —          | —          | 3.3V power
+#
+# [VERIFY] Locate PMOD-B pins on your board schematic and adjust.
+
+# LED1 — R/G/B (8-bit PWM @ 200Hz, double-buffered)
+set_location_assignment PIN_K1 -to pmod_b_io0
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io0
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io0
+
+set_location_assignment PIN_K2 -to pmod_b_io1
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io1
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io1
+
+set_location_assignment PIN_L1 -to pmod_b_io2
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io2
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io2
+
+# LED2 — R/G/B
+set_location_assignment PIN_L2 -to pmod_b_io3
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io3
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io3
+
+set_location_assignment PIN_J1 -to pmod_b_io4
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io4
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io4
+
+set_location_assignment PIN_J2 -to pmod_b_io5
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io5
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io5
+
+# LED3 — R/G (reserved for expansion)
+set_location_assignment PIN_G1 -to pmod_b_io6
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io6
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io6
+
+set_location_assignment PIN_G2 -to pmod_b_io7
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to pmod_b_io7
+set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io7
+
+# ============================================================================
+# Unused pins — tri-state input (prevents floating)
+# ============================================================================
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+
+# ============================================================================
+# Global I/O constraints
+# ============================================================================
+# Voltage: all banks 3.3V LVTTL (Cyclone IV E default for dev boards)
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 1
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 2
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 3
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 4
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 5
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 6
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 7
+set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 8
+
+# ============================================================================
+# SignalTap II — Embedded Logic Analyzer
+# ============================================================================
+#
+# Add a SignalTap II file in Quartus:
+#   File → New → SignalTap II Logic Analyzer File
+#
+# Recommended probe nodes (from DESIGN.md verification plan):
+#   Trigger               | Signals to watch
+#   ----------------------+----------------------------------------
+#   rx_vld = 1            | uart_rx.rx_byte[7:0]
+#   cmd_vld = 1           | cmd_mode[1:0], cmd_r[5:0], cmd_g[5:0], cmd_b[5:0]
+#   Continuous sample     | duty_led1_r[7:0], duty_led1_g[7:0], duty_led1_b[7:0]
+#   State change          | effect_engine.cur_mode[1:0]
+#   Breath cycle peak/val | effect_engine.sin_val[7:0], breath_phase[15:12]
+#   UART TX activity      | pmod_a_tx, tx_start, tx_byte[7:0]
+#
+# SignalTap sample clock: 50MHz system clock (sufficient for 115200 bps UART)
+# Sample depth: 2K (balances signal detail and compile time)
+# Trigger position: Pre-trigger 50%
+#
+# NOTE: SignalTap uses on-chip RAM for the sample buffer.
+# EP4CE15 has 504Kbit RAM. 2K depth x 32 signals ≈ 64Kbit, well within budget.
+
+# ============================================================================
+# Timing constraints (see rgb_controller.sdc)
+# ============================================================================
+set_global_assignment -name SDC_FILE rgb_controller.sdc
+
+# ============================================================================
+# Compilation optimization
+# ============================================================================
+set_global_assignment -name OPTIMIZATION_MODE "BALANCED"
+set_global_assignment -name SYNTHESIS_EFFORT "AUTO"
+set_global_assignment -name FITTER_EFFORT "AUTO"
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
+# 6 PWM instances share one pwm_tick source — synthesis deduplicates
+# the counter logic automatically. PhysSyn helps remove redundancy.
+
+# ============================================================================
+# Simulation settings (ModelSim)
+# ============================================================================
+set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (Verilog)"
+set_global_assignment -name EDA_OUTPUT_DATA_FORMAT "VERILOG HDL"
+set_global_assignment -name EDA_TIME_SCALE "1 ns" -section_id eda_simulation
+set_global_assignment -name EDA_RUN_SIM_TOOL_AUTOMATICALLY OFF -section_id eda_simulation
+
+# ============================================================================
+# Programming file generation
+# ============================================================================
+set_global_assignment -name GENERATE_SVF_FILE ON
+set_global_assignment -name GENERATE_RBF_FILE OFF
+set_global_assignment -name GENERATE_TTF_FILE OFF

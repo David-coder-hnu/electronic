@@ -1,0 +1,56 @@
+# Android
+.gradle/
+build/
+*.apk
+*.aab
+*.ap_
+*.dex
+local.properties
+*.hprof
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Quartus / FPGA
+db/
+incremental_db/
+output_files/
+simulation/
+*.qws
+*.qdf
+*.sof
+*.pof
+*.jdi
+*.sld
+*.summary
+*.done
+*.rpt
+*.pin
+*.qsf
+*.qpf
+hw_image/
+
+# ModelSim
+work/
+*.wlf
+transcript
+vsim.wlf
+vlog.opt
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# gstack local settings (not project-specific)
+.claude/settings.local.json
+
+# Gradle wrapper (optional — include if you want reproducible builds)
+# gradle/wrapper/gradle-wrapper.jar
+# gradlew
+# gradlew.bat

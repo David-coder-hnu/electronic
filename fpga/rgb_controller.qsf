@@ -139,19 +139,6 @@ set_instance_assignment -name CURRENT_STRENGTH_NEW "8MA" -to pmod_b_io7
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
 
 # ============================================================================
-# Global I/O constraints
-# ============================================================================
-# Voltage: all banks 3.3V LVTTL (Cyclone IV E default for dev boards)
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 1
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 2
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 3
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 4
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 5
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 6
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 7
-set_global_assignment -name IOBANK_VCCIO  "3.3 V" -section_id 8
-
-# ============================================================================
 # SignalTap II — Embedded Logic Analyzer
 # ============================================================================
 #
@@ -184,6 +171,7 @@ set_global_assignment -name OPTIMIZATION_MODE "Balanced"
 set_global_assignment -name SYNTHESIS_EFFORT "Auto"
 set_global_assignment -name FITTER_EFFORT "Auto Fit"
 set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL "Normal"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 8
 # 6 PWM instances share one pwm_tick source — synthesis deduplicates
 # the counter logic automatically, no special flags needed.
 

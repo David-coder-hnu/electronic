@@ -66,6 +66,10 @@ module effect_engine #(
     wire [3:0] phase_idx = breath_phase[15:12];  // Top 4 bits → 16-entry LUT
     wire [7:0] sin_val   = sin_lut[phase_idx];
 
+    // Chasing mode: LED2 phase offset by π (half the LUT)
+    wire [3:0] chase_idx_led2 = chase_phase[15:12] + 4'd8;
+    wire [7:0] sin_led2       = sin_lut[chase_idx_led2];
+
     // ── Helper functions ──
 
     // Scale: (base * factor) / 64 → PWM_WIDTH-bit duty
@@ -181,8 +185,6 @@ module effect_engine #(
 
                 MODE_CHASING: begin
                     // LED1 and LED2 alternate: sin_val for LED1, sin(phase+π) for LED2
-                    wire [3:0] chase_idx_led2 = chase_phase[15:12] + 4'd8;
-                    wire [7:0] sin_led2 = sin_lut[chase_idx_led2];
 
                     if (disc_timer > 0) begin
                         duty_led1_r <= scale(base_r, div255(sin_val   * disc_timer));

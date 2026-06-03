@@ -66,14 +66,28 @@ module effect_engine #(
     wire [3:0] phase_idx = breath_phase[15:12];  // Top 4 bits → 16-entry LUT
     wire [7:0] sin_val   = sin_lut[phase_idx];
 
-    // Scale base_color * sin_val / 255
+    // ── Helper functions ──
+
+    // Scale: (base * factor) / 64 → PWM_WIDTH-bit duty
     function [PWM_WIDTH-1:0] scale;
         input [5:0] base;     // 6-bit color (0-63)
         input [7:0] factor;   // 8-bit factor (0-255)
         reg [13:0] product;   // 6+8 = 14 bits
         begin
-            product = {2'b0, base} * factor;  // Extend base to 8 bits, then 6*8=14 bits max
-            scale   = product[13:6];           // Divide by 64 for 8-bit PWM output
+            product = {2'b0, base} * factor;
+            scale   = product[13:6];  // Divide by 64
+        end
+    endfunction
+
+    // Approximate x / 255 via (x * 257) >> 16.  Error < 0.002%.
+    // Replaces 9 hardware divider instances with a single DSP-friendly multiply.
+    // x is sin_val(8b) * disc_timer(8b) = 16b product.
+    function [7:0] div255;
+        input [15:0] x;
+        reg [31:0] tmp;
+        begin
+            tmp    = x * 32'd257;
+            div255 = tmp[23:16];  // >> 16, keep 8 bits
         end
     endfunction
 
@@ -83,10 +97,10 @@ module effect_engine #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            cur_mode    <= MODE_STATIC;
-            base_r      <= 6'h3F;  // White-ish
-            base_g      <= 6'h3F;
-            base_b      <= 6'h3F;
+            cur_mode     <= MODE_STATIC;
+            base_r       <= 6'h3F;
+            base_g       <= 6'h3F;
+            base_b       <= 6'h3F;
             breath_phase <= 16'd0;
             chase_phase  <= 16'd0;
             disc_timer   <= 8'd0;
@@ -105,7 +119,6 @@ module effect_engine #(
                 base_r   <= cmd_r;
                 base_g   <= cmd_g;
                 base_b   <= cmd_b;
-                // Smooth transition: don't reset phase, continue from current
             end
 
             // Disconnect handling: fade to off
@@ -119,15 +132,13 @@ module effect_engine #(
                 disc_timer   <= 8'd0;
             end
 
-            // Breathing phase update
+            // Phase update
             if (pwm_tick) begin
                 breath_phase <= breath_phase + 16'd109;
                 chase_phase  <= chase_phase + 16'd109;
             end
 
-            // Fade multiplier: 1.0 when connected, ramps down when disconnected
-            // disc_timer counts down: 255→0 in ~5s (at 200Hz, 200*5=1000, too fast for 8-bit)
-            // Use slower countdown: every 32 pwm_ticks
+            // Fade countdown (one step per pwm_tick, 255 ticks ≈ 1.3s)
             if (pwm_tick && disc_timer > 0)
                 disc_timer <= disc_timer - 1'b1;
 
@@ -135,7 +146,6 @@ module effect_engine #(
             case (cur_mode)
                 MODE_STATIC: begin
                     if (disc_timer > 0) begin
-                        // Fading
                         duty_led1_r <= scale(base_r, disc_timer);
                         duty_led1_g <= scale(base_g, disc_timer);
                         duty_led1_b <= scale(base_b, disc_timer);
@@ -153,37 +163,34 @@ module effect_engine #(
                 end
 
                 MODE_BREATHING: begin
-                    // sin_val cycles 0→255→0 over ~3 seconds
-                    // base_color × sin_val / 255 = breathing brightness
                     if (disc_timer > 0) begin
-                        duty_led1_r <= scale(base_r, sin_val * disc_timer / 255);
-                        duty_led1_g <= scale(base_g, sin_val * disc_timer / 255);
-                        duty_led1_b <= scale(base_b, sin_val * disc_timer / 255);
+                        // div255(sin_val * disc_timer) — multiply-shift, no hardware divider
+                        duty_led1_r <= scale(base_r, div255(sin_val * disc_timer));
+                        duty_led1_g <= scale(base_g, div255(sin_val * disc_timer));
+                        duty_led1_b <= scale(base_b, div255(sin_val * disc_timer));
                     end else begin
                         duty_led1_r <= scale(base_r, sin_val);
                         duty_led1_g <= scale(base_g, sin_val);
                         duty_led1_b <= scale(base_b, sin_val);
                     end
-                    // LED2 follows LED1 (same breathing)
+                    // LED2 follows LED1
                     duty_led2_r <= duty_led1_r;
                     duty_led2_g <= duty_led1_g;
                     duty_led2_b <= duty_led1_b;
                 end
 
                 MODE_CHASING: begin
-                    // LED1 and LED2 alternate: LED1 fades out while LED2 fades in
-                    // Use chase_phase offset by half cycle (phase + 32768)
-                    // sin_val for LED1, sin(phase+π) for LED2
-                    wire [3:0] chase_idx_led2 = chase_phase[15:12] + 4'd8;  // +π offset
+                    // LED1 and LED2 alternate: sin_val for LED1, sin(phase+π) for LED2
+                    wire [3:0] chase_idx_led2 = chase_phase[15:12] + 4'd8;
                     wire [7:0] sin_led2 = sin_lut[chase_idx_led2];
 
                     if (disc_timer > 0) begin
-                        duty_led1_r <= scale(base_r, sin_val * disc_timer / 255);
-                        duty_led1_g <= scale(base_g, sin_val * disc_timer / 255);
-                        duty_led1_b <= scale(base_b, sin_val * disc_timer / 255);
-                        duty_led2_r <= scale(base_r, sin_led2 * disc_timer / 255);
-                        duty_led2_g <= scale(base_g, sin_led2 * disc_timer / 255);
-                        duty_led2_b <= scale(base_b, sin_led2 * disc_timer / 255);
+                        duty_led1_r <= scale(base_r, div255(sin_val   * disc_timer));
+                        duty_led1_g <= scale(base_g, div255(sin_val   * disc_timer));
+                        duty_led1_b <= scale(base_b, div255(sin_val   * disc_timer));
+                        duty_led2_r <= scale(base_r, div255(sin_led2  * disc_timer));
+                        duty_led2_g <= scale(base_g, div255(sin_led2  * disc_timer));
+                        duty_led2_b <= scale(base_b, div255(sin_led2  * disc_timer));
                     end else begin
                         duty_led1_r <= scale(base_r, sin_val);
                         duty_led1_g <= scale(base_g, sin_val);
@@ -195,7 +202,6 @@ module effect_engine #(
                 end
 
                 default: begin
-                    // Reserved — behave like static
                     duty_led1_r <= scale(base_r, 8'hFF);
                     duty_led1_g <= scale(base_g, 8'hFF);
                     duty_led1_b <= scale(base_b, 8'hFF);

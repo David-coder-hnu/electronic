@@ -33,10 +33,16 @@ module cmd_decoder (
     localparam S_XOR        = 3'd6;
     localparam S_VALIDATE   = 3'd7;
 
+    // Frame timeout: if bytes stop arriving mid-frame, reset to idle.
+    // 20-bit counter @ 50MHz → 1,048,575 counts ≈ 21ms timeout.
+    // 21ms at 115200 bps = ~240 byte-times, far longer than any valid 6-byte frame.
+    localparam TIMEOUT_MAX = 20'd1_000_000;
+
     reg [2:0] state;
     reg [7:0] byte_buf [0:4];  // CMD,R,G,B,XOR
     reg [2:0] byte_cnt;
     reg [7:0] xor_calc;
+    reg [19:0] timeout_cnt;
 
     // BLESTA synchronizer
     reg blesta_d1, blesta_d2;
@@ -62,6 +68,7 @@ module cmd_decoder (
             byte_buf[3] <= 8'd0;
             byte_buf[4] <= 8'd0;
             xor_calc  <= 8'd0;
+            timeout_cnt <= 20'd0;
             cmd_mode  <= 2'd0;
             cmd_r     <= 6'd0;
             cmd_g     <= 6'd0;
@@ -71,6 +78,22 @@ module cmd_decoder (
         end else begin
             cmd_vld   <= 1'b0;
             frame_err <= 1'b0;
+
+            // ── Frame timeout: guard against stuck mid-frame ──
+            // Count only when inside a frame (past S_WAIT_HEAD).
+            // S_IDLE and S_WAIT_HEAD are waiting states — no timeout needed.
+            if (state != S_IDLE && state != S_WAIT_HEAD) begin
+                if (timeout_cnt >= TIMEOUT_MAX) begin
+                    // Timeout — abort partial frame, return to idle
+                    state       <= S_IDLE;
+                    timeout_cnt <= 20'd0;
+                    frame_err   <= 1'b1;   // Signal the timeout as a frame error
+                end else begin
+                    timeout_cnt <= timeout_cnt + 1'b1;
+                end
+            end else begin
+                timeout_cnt <= 20'd0;
+            end
 
             case (state)
                 S_IDLE: begin

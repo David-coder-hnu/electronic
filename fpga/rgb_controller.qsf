@@ -167,22 +167,22 @@ set_global_assignment -name SDC_FILE rgb_controller.sdc
 
 # ============================================================================
 # Compilation optimization
+#   Physical synthesis assignments removed — they require the paid
+#   Quartus II Standard/Pro edition. Web Edition (free) ships without them.
 # ============================================================================
-set_global_assignment -name OPTIMIZATION_MODE "BALANCED"
-set_global_assignment -name SYNTHESIS_EFFORT "AUTO"
-set_global_assignment -name FITTER_EFFORT "AUTO"
-set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
-set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
+set_global_assignment -name OPTIMIZATION_MODE "Balanced"
+set_global_assignment -name SYNTHESIS_EFFORT "Auto"
+set_global_assignment -name FITTER_EFFORT "Auto Fit"
+set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL "Normal"
 # 6 PWM instances share one pwm_tick source — synthesis deduplicates
-# the counter logic automatically. PhysSyn helps remove redundancy.
+# the counter logic automatically, no special flags needed.
 
 # ============================================================================
 # Simulation settings (ModelSim)
+#   EDA tool assignments go through Quartus menu:
+#   Assignments → Settings → EDA Tool Settings → Simulation
 # ============================================================================
 set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (Verilog)"
-set_global_assignment -name EDA_OUTPUT_DATA_FORMAT "VERILOG HDL"
-set_global_assignment -name EDA_TIME_SCALE "1 ns" -section_id eda_simulation
-set_global_assignment -name EDA_RUN_SIM_TOOL_AUTOMATICALLY OFF -section_id eda_simulation
 
 # ============================================================================
 # Programming file generation

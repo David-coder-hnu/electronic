@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +31,7 @@ fun BluetoothPage(vm: MainViewModel) {
     val devices by vm.devices.collectAsState()
     val isScanning by vm.isScanning.collectAsState()
     val isConnected by vm.isConnected.collectAsState()
+    val connectionError by vm.connectionError.collectAsState()
     val context = LocalContext.current
 
     // Permission launcher for Android 12+
@@ -74,6 +76,20 @@ fun BluetoothPage(vm: MainViewModel) {
         )
 
         Spacer(Modifier.height(8.dp))
+
+        // ── Connection error ──
+        connectionError?.let { err ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(AccentWarm.copy(alpha = 0.15f))
+                    .padding(12.dp)
+            ) {
+                Text(err, color = AccentWarm, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         // Scan button
         Row(

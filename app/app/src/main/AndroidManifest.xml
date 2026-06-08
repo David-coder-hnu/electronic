@@ -13,7 +13,7 @@
         android:allowBackup="true"
         android:label="RGB 灯控"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.Dark.NoActionBar">
+        android:theme="@style/Theme.RGBController">
 
         <activity
             android:name=".MainActivity"

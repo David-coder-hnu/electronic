@@ -4,24 +4,20 @@ import android.app.Application
 import android.graphics.Color as AndroidColor
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.rgblight.controller.data.BtDevice
-import com.rgblight.controller.data.LightCommand
-import com.rgblight.controller.data.Scene
-import com.rgblight.controller.data.SceneRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import com.rgblight.controller.data.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class HsvColor(
-    val hue: Float = 0f,        // 0..360
-    val saturation: Float = 1f,  // 0..1
-    val value: Float = 1f        // 0..1
+    val hue: Float = 0f,
+    val saturation: Float = 1f,
+    val value: Float = 1f
 )
 
 data class RgbColor(
-    val r: Float = 0f,  // 0..1
+    val r: Float = 0f,
     val g: Float = 0f,
     val b: Float = 0f
 )
@@ -32,44 +28,89 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val sceneRepo = SceneRepository(application)
 
     // ── Color state ──
-
     private val _hsv = MutableStateFlow(HsvColor(hue = 0f, saturation = 1f, value = 1f))
     val hsv: StateFlow<HsvColor> = _hsv.asStateFlow()
 
     private val _rgb = MutableStateFlow(RgbColor(1f, 0f, 0f))
     val rgb: StateFlow<RgbColor> = _rgb.asStateFlow()
 
-    // ── Mode ──
-
-    private val _mode = MutableStateFlow(0)  // 0=static, 1=breathing, 2=chasing
+    // ── Mode: 0=static, 1=breathing, 2=chasing ──
+    private val _mode = MutableStateFlow(0)
     val mode: StateFlow<Int> = _mode.asStateFlow()
 
-    // ── Brightness (0..100, maps to 6-bit 0..63 for FPGA) ──
-
+    // ── Brightness 0..100 → 6-bit 0..63 on FPGA ──
     private val _brightness = MutableStateFlow(100)
     val brightness: StateFlow<Int> = _brightness.asStateFlow()
 
-    // ── Bluetooth (delegated to BleManager flows) ──
+    // ── Effect parameters (sent via 0xAC config frame) ──
+    private val _breathPeriod = MutableStateFlow(3.0f)      // seconds, 1.0..5.0
+    val breathPeriod: StateFlow<Float> = _breathPeriod.asStateFlow()
 
+    private val _chaseSpeed = MutableStateFlow(2.0f)        // seconds, 0.5..5.0
+    val chaseSpeed: StateFlow<Float> = _chaseSpeed.asStateFlow()
+
+    private val _maxBrightness = MutableStateFlow(100)      // 10..100
+    val maxBrightness: StateFlow<Int> = _maxBrightness.asStateFlow()
+
+    private val _autoReconnect = MutableStateFlow(true)
+    val autoReconnect: StateFlow<Boolean> = _autoReconnect.asStateFlow()
+
+    private val _sendConfirm = MutableStateFlow(true)
+    val sendConfirm: StateFlow<Boolean> = _sendConfirm.asStateFlow()
+
+    // ── Bluetooth state (delegated) ──
     val devices: StateFlow<List<BtDevice>> = btManager.devices
     val isScanning: StateFlow<Boolean> = btManager.isScanning
     val isConnected: StateFlow<Boolean> = btManager.isConnected
+    val connectionError: StateFlow<String?> = btManager.connectionError
+
+    // ── FPGA feedback (parsed from 0xBB frame via BleManager.rxData) ──
+    private val _fpgaStatus = MutableStateFlow<FpgaStatus?>(null)
+    val fpgaStatus: StateFlow<FpgaStatus?> = _fpgaStatus.asStateFlow()
 
     // ── Scenes ──
-
     private val _scenes = MutableStateFlow<List<Scene>>(emptyList())
     val scenes: StateFlow<List<Scene>> = _scenes.asStateFlow()
 
-    // ── UI state ──
-
+    // ── UI feedback ──
     private val _lastSentHex = MutableStateFlow("#FF0000")
     val lastSentHex: StateFlow<String> = _lastSentHex.asStateFlow()
 
-    private val _sendFeedback = MutableStateFlow(false)  // true → shows sent confirmation for 0.5s
+    private val _sendFeedback = MutableStateFlow(false)
     val sendFeedback: StateFlow<Boolean> = _sendFeedback.asStateFlow()
+
+    private var feedbackJob: Job? = null
+    private var statusJob: Job? = null
 
     init {
         loadScenes()
+
+        // Parse incoming 0xBB status frames from FPGA
+        statusJob = viewModelScope.launch {
+            btManager.rxData.collect { data ->
+                if (data != null && data.size >= 6 && data[0] == 0xBB.toByte()) {
+                    try {
+                        val xor = data[0] xor data[1] xor data[2] xor data[3] xor data[4]
+                        if (xor == data[5]) {
+                            _fpgaStatus.value = FpgaStatus(
+                                curMode = (data[1].toInt() shr 6) and 0x03,
+                                btConnected = ((data[1].toInt() shr 5) and 0x01) == 1,
+                                r = data[2].toInt() and 0xFF,
+                                g = data[3].toInt() and 0xFF,
+                                b = data[4].toInt() and 0xFF
+                            )
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        statusJob?.cancel()
+        feedbackJob?.cancel()
+        btManager.close()
     }
 
     // ── Color actions ──
@@ -81,7 +122,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             value = v.coerceIn(0f, 1f)
         )
         _hsv.value = clamped
-        // Convert HSV → RGB float
         val colorInt = AndroidColor.HSVToColor(floatArrayOf(clamped.hue, clamped.saturation, clamped.value))
         _rgb.value = RgbColor(
             r = AndroidColor.red(colorInt) / 255f,
@@ -107,53 +147,78 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _hsv.value = HsvColor(hue = hsvArr[0], saturation = hsvArr[1], value = hsvArr[2])
     }
 
-    fun setMode(newMode: Int) {
-        _mode.value = newMode.coerceIn(0, 2)
+    fun setMode(newMode: Int) { _mode.value = newMode.coerceIn(0, 2) }
+
+    fun setBrightness(value: Int) { _brightness.value = value.coerceIn(0, 100) }
+
+    // ── Settings actions ──
+
+    fun setBreathPeriod(v: Float) {
+        _breathPeriod.value = v.coerceIn(1f, 5f)
+        sendConfig(0, (v * 10).toInt())
     }
 
-    fun setBrightness(value: Int) {
-        _brightness.value = value.coerceIn(0, 100)
+    fun setChaseSpeed(v: Float) {
+        _chaseSpeed.value = v.coerceIn(0.5f, 5f)
+        sendConfig(1, (v * 10).toInt())
+    }
+
+    fun setMaxBrightness(v: Int) {
+        _maxBrightness.value = v.coerceIn(10, 100)
+        sendConfig(2, v)
+    }
+
+    fun setAutoReconnect(v: Boolean) {
+        _autoReconnect.value = v
+        btManager.autoReconnect = v
+    }
+
+    fun setSendConfirm(v: Boolean) { _sendConfirm.value = v }
+
+    private fun sendConfig(paramId: Int, value: Int) {
+        if (_isConnected.value) {
+            btManager.send(ConfigCommand(paramId, value).toFrame())
+        }
     }
 
     // ── Send to FPGA ──
 
     fun sendColor() {
-        val r6 = ((rgb.value.r * _brightness.value / 100f) * 63).toInt().coerceIn(0, 63)
-        val g6 = ((rgb.value.g * _brightness.value / 100f) * 63).toInt().coerceIn(0, 63)
-        val b6 = ((rgb.value.b * _brightness.value / 100f) * 63).toInt().coerceIn(0, 63)
+        val scale = _brightness.value / 100f
+        val r6 = ((rgb.value.r * scale) * 63).toInt().coerceIn(0, 63)
+        val g6 = ((rgb.value.g * scale) * 63).toInt().coerceIn(0, 63)
+        val b6 = ((rgb.value.b * scale) * 63).toInt().coerceIn(0, 63)
         val cmd = LightCommand(mode = _mode.value, r = r6, g = g6, b = b6)
         btManager.send(cmd.toFrame())
 
-        // Update HEX display
-        _lastSentHex.value = String.format("#%02X%02X%02X",
+        _lastSentHex.value = String.format(
+            "#%02X%02X%02X",
             (rgb.value.r * 255).toInt(),
             (rgb.value.g * 255).toInt(),
             (rgb.value.b * 255).toInt()
         )
-
-        // Show sent confirmation for 0.5s
-        _sendFeedback.value = true
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(500)
-            _sendFeedback.value = false
-        }
+        triggerFeedback()
     }
 
     fun sendScene(scene: Scene) {
-        val r6 = ((scene.r / 63f * scene.brightness / 100f) * 63).toInt().coerceIn(0, 63)
-        val g6 = ((scene.g / 63f * scene.brightness / 100f) * 63).toInt().coerceIn(0, 63)
-        val b6 = ((scene.b / 63f * scene.brightness / 100f) * 63).toInt().coerceIn(0, 63)
+        val scale = scene.brightness / 100f
+        val r6 = ((scene.r / 63f * scale) * 63).toInt().coerceIn(0, 63)
+        val g6 = ((scene.g / 63f * scale) * 63).toInt().coerceIn(0, 63)
+        val b6 = ((scene.b / 63f * scale) * 63).toInt().coerceIn(0, 63)
         val cmd = LightCommand(mode = scene.mode, r = r6, g = g6, b = b6)
         btManager.send(cmd.toFrame())
 
-        // Sync UI to scene state
         _mode.value = scene.mode
         _brightness.value = scene.brightness
         setRgb(scene.r / 63f, scene.g / 63f, scene.b / 63f)
+        triggerFeedback()
+    }
 
+    private fun triggerFeedback() {
+        feedbackJob?.cancel()
         _sendFeedback.value = true
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(500)
+        feedbackJob = viewModelScope.launch {
+            delay(800)
             _sendFeedback.value = false
         }
     }
@@ -162,23 +227,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startScan() = btManager.startScan()
     fun stopScan() = btManager.stopScan()
-    fun connect(device: BtDevice) {
-        // BtDevice address → BluetoothDevice → connect
-        val btAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
-        val remoteDevice = btAdapter?.getRemoteDevice(device.address)
-        remoteDevice?.let { btManager.connect(it) }
-    }
+    fun connect(device: BtDevice) = btManager.connect(device)
     fun disconnect() = btManager.disconnect()
 
     // ── Scene actions ──
 
     fun saveScene(name: String) {
+        val scale = _brightness.value / 100f
         val scene = Scene(
             name = name,
             mode = _mode.value,
-            r = ((rgb.value.r * _brightness.value / 100f) * 63).toInt().coerceIn(0, 63),
-            g = ((rgb.value.g * _brightness.value / 100f) * 63).toInt().coerceIn(0, 63),
-            b = ((rgb.value.b * _brightness.value / 100f) * 63).toInt().coerceIn(0, 63),
+            r = ((rgb.value.r * scale) * 63).toInt().coerceIn(0, 63),
+            g = ((rgb.value.g * scale) * 63).toInt().coerceIn(0, 63),
+            b = ((rgb.value.b * scale) * 63).toInt().coerceIn(0, 63),
             brightness = _brightness.value
         )
         sceneRepo.save(scene)
@@ -199,3 +260,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _scenes.value = sceneRepo.loadAll()
     }
 }
+
+/** Parsed FPGA status from 0xBB frame */
+data class FpgaStatus(
+    val curMode: Int,
+    val btConnected: Boolean,
+    val r: Int,
+    val g: Int,
+    val b: Int
+)

@@ -69,7 +69,7 @@ fun RgbApp(vm: MainViewModel, modifier: Modifier = Modifier) {
                 0 -> ColorWheelPage(vm)
                 1 -> ScenePage(vm)
                 2 -> BluetoothPage(vm)
-                3 -> SettingsPage()
+                3 -> SettingsPage(vm)
             }
         }
     }

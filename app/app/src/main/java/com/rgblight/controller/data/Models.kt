@@ -26,6 +26,33 @@ data class LightCommand(
     }
 }
 
+/**
+ * Effect-config frame sent to FPGA: 0xAC + PARAM_ID + VALUE_H + VALUE_L + XOR (5 bytes)
+ *
+ * PARAM_ID: 0=breath period, 1=chase speed, 2=max brightness
+ * Breath period:     VALUE = (period_seconds * 10) → 10..50  (1.0s..5.0s)
+ * Chase speed:       VALUE = (period_seconds * 10) → 5..50   (0.5s..5.0s)
+ * Max brightness:    VALUE = 10..100  (percentage)
+ */
+data class ConfigCommand(
+    val paramId: Int,
+    val value: Int
+) {
+    fun toFrame(): ByteArray {
+        val xor = (0xAC.toByte()
+            xor paramId.toByte()
+            xor (value shr 8).toByte()
+            xor (value and 0xFF).toByte()).toByte()
+        return byteArrayOf(
+            0xAC.toByte(),
+            paramId.toByte(),
+            (value shr 8).toByte(),
+            (value and 0xFF).toByte(),
+            xor
+        )
+    }
+}
+
 /** Saved scene preset */
 data class Scene(
     val id: Long = System.currentTimeMillis(),

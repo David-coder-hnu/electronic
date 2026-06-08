@@ -26,6 +26,8 @@ fun ColorWheelPage(vm: MainViewModel) {
     val brightness by vm.brightness.collectAsState()
     val isConnected by vm.isConnected.collectAsState()
     val sendFeedback by vm.sendFeedback.collectAsState()
+    val connectionError by vm.connectionError.collectAsState()
+    val fpgaStatus by vm.fpgaStatus.collectAsState()
 
     Column(
         modifier = Modifier
@@ -64,6 +66,47 @@ fun ColorWheelPage(vm: MainViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
+
+        // ── Connection error banner ──
+        connectionError?.let { err ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(AccentWarm.copy(alpha = 0.15f))
+                    .padding(12.dp)
+            ) {
+                Text(err, color = AccentWarm, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // ── FPGA status bar ──
+        if (isConnected && fpgaStatus != null) {
+            val status = fpgaStatus!!
+            val modeName = mapOf(0 to "静态色", 1 to "呼吸", 2 to "流水")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Success.copy(alpha = 0.08f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "当前: ${modeName[status.curMode] ?: "静态色"}  #${String.format("%02X%02X%02X", status.r, status.g, status.b)}",
+                    color = Success,
+                    fontSize = 13.sp
+                )
+                Text(
+                    "FPGA ${if (status.btConnected) "在线" else "离线"}",
+                    color = if (status.btConnected) Success else TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         // ── Color wheel ──
         HsvColorWheel(

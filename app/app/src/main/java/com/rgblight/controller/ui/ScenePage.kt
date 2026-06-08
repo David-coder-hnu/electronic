@@ -1,4 +1,4 @@
-package com.rgblight.controller.ui
+﻿package com.rgblight.controller.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -169,7 +169,7 @@ private fun SceneCard(scene: Scene, vm: MainViewModel) {
         }
 
         IconButton(onClick = { showDeleteConfirm = true }) {
-            Text("🗑".let { "×" }, color = AccentWarm, fontSize = 18.sp)
+                Text("×", color = AccentWarm, fontSize = 20.sp)
         }
     }
 

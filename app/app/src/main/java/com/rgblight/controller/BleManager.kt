@@ -136,7 +136,9 @@ class BleManager(private val context: Context) {
             // Huawei, OPPO, VIVO) crash on ParcelUuid in ScanFilter. Software
             // filtering in onScanResult is safe and universally compatible.
             scanner.startScan(emptyList(), settings, scanCallback)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Catch Throwable not Exception — some BLE stacks throw Error
+            // (e.g. NoClassDefFoundError on heavily customized ROMs)
             Log.e(TAG, "startScan crashed", e)
             _isScanning.value = false
             _connectionError.value = "扫描启动失败"
@@ -147,7 +149,7 @@ class BleManager(private val context: Context) {
     fun stopScan() {
         try {
             btAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
-        } catch (_: SecurityException) {}
+        } catch (_: Throwable) {}
         _isScanning.value = false
     }
 
@@ -259,20 +261,23 @@ class BleManager(private val context: Context) {
     private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val dev = result.device
-            val name = dev.name ?: "CH9143-${dev.address.takeLast(6)}"
-            val existing = _devices.value.find { it.address == dev.address }
-            if (existing == null) {
-                _devices.value = _devices.value + BtDevice(
-                    name = name,
-                    address = dev.address,
-                    rssi = result.rssi
-                )
-            } else {
-                // Update RSSI in place
-                _devices.value = _devices.value.map {
-                    if (it.address == dev.address) it.copy(rssi = result.rssi) else it
+            try {
+                val dev = result.device ?: return
+                val name = dev.name ?: "CH9143-${dev.address.takeLast(6)}"
+                val existing = _devices.value.find { it.address == dev.address }
+                if (existing == null) {
+                    _devices.value = _devices.value + BtDevice(
+                        name = name,
+                        address = dev.address,
+                        rssi = result.rssi
+                    )
+                } else {
+                    _devices.value = _devices.value.map {
+                        if (it.address == dev.address) it.copy(rssi = result.rssi) else it
+                    }
                 }
+            } catch (_: Throwable) {
+                Log.e(TAG, "onScanResult crashed — swallowed to keep scan alive")
             }
         }
 

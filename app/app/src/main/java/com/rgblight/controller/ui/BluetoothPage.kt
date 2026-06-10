@@ -2,6 +2,7 @@ package com.rgblight.controller.ui
 
 import android.Manifest
 import android.os.Build
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
@@ -37,33 +38,45 @@ fun BluetoothPage(vm: MainViewModel) {
     // Permission launcher for Android 12+
     var hasBlePermission by remember {
         mutableStateOf(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                android.content.pm.PackageManager.PERMISSION_GRANTED ==
-                    context.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
-            else true
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                    android.content.pm.PackageManager.PERMISSION_GRANTED ==
+                        context.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
+                else true
+            } catch (e: Throwable) {
+                Log.e("BluetoothPage", "permission check crashed", e)
+                false // assume no permission, will request it
+            }
         )
     }
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        val granted = grants.values.all { it }
-        hasBlePermission = granted
-        if (granted) {
-            // Auto-start scan after user grants permission
-            vm.startScan()
+        try {
+            val granted = grants.values.all { it }
+            hasBlePermission = granted
+            if (granted) {
+                vm.startScan()
+            }
+        } catch (e: Throwable) {
+            Log.e("BluetoothPage", "permLauncher callback crashed", e)
         }
     }
 
     fun requestAndScan() {
-        if (hasBlePermission) {
-            if (isScanning) vm.stopScan() else vm.startScan()
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                permLauncher.launch(arrayOf(
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ))
+        try {
+            if (hasBlePermission) {
+                if (isScanning) vm.stopScan() else vm.startScan()
+            } else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    permLauncher.launch(arrayOf(
+                        Manifest.permission.BLUETOOTH_SCAN,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ))
+                }
             }
+        } catch (e: Throwable) {
+            Log.e("BluetoothPage", "requestAndScan crashed", e)
         }
     }
 

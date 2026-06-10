@@ -10,11 +10,7 @@ data class LightCommand(
     /** Encode to 6-byte frame for FPGA */
     fun toFrame(): ByteArray {
         val cmd = (mode shl 6) and 0xC0  // bits [7:6]
-        val xor = 0xAA.toByte() xor
-                  cmd.toByte() xor
-                  r.toByte() xor
-                  g.toByte() xor
-                  b.toByte()
+        val xor = (0xAA xor cmd xor r xor g xor b).toByte()
         return byteArrayOf(
             0xAA.toByte(),          // Frame header
             cmd.toByte(),            // CMD byte
@@ -39,10 +35,7 @@ data class ConfigCommand(
     val value: Int
 ) {
     fun toFrame(): ByteArray {
-        val xor = (0xAC.toByte()
-            xor paramId.toByte()
-            xor (value shr 8).toByte()
-            xor (value and 0xFF).toByte()).toByte()
+        val xor = (0xAC xor paramId xor (value shr 8) xor (value and 0xFF)).toByte()
         return byteArrayOf(
             0xAC.toByte(),
             paramId.toByte(),

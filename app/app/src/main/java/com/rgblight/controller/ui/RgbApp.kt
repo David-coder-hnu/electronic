@@ -52,7 +52,7 @@ fun RgbApp(vm: MainViewModel, modifier: Modifier = Modifier) {
                             Text(
                                 tab.label,
                                 fontSize = 12.sp,
-                                fontWeight = if (selectedTab == index) FontWeight.Semibold else FontWeight.Normal,
+                                fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (selectedTab == index) Accent else TextDisabled
                             )
                         },

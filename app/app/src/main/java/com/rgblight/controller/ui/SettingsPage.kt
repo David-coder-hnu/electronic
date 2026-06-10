@@ -103,7 +103,7 @@ private fun SectionHeader(title: String) {
         title,
         color = Accent,
         fontSize = 14.sp,
-        fontWeight = FontWeight.Semibold,
+        fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
     )
 }
@@ -199,5 +199,5 @@ private fun SettingsInfoRow(label: String, subtitle: String) {
 
 @Composable
 private fun SettingsDivider() {
-    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+    Divider(color = Divider, thickness = 0.5.dp)
 }

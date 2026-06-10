@@ -90,8 +90,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             btManager.rxData.collect { data ->
                 if (data != null && data.size >= 6 && data[0] == 0xBB.toByte()) {
                     try {
-                        val xor = data[0] xor data[1] xor data[2] xor data[3] xor data[4]
-                        if (xor == data[5]) {
+                        val xor = (data[0].toInt() xor data[1].toInt() xor data[2].toInt() xor data[3].toInt() xor data[4].toInt()) and 0xFF
+                        if (xor == (data[5].toInt() and 0xFF)) {
                             _fpgaStatus.value = FpgaStatus(
                                 curMode = (data[1].toInt() shr 6) and 0x03,
                                 btConnected = ((data[1].toInt() shr 5) and 0x01) == 1,
@@ -176,7 +176,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSendConfirm(v: Boolean) { _sendConfirm.value = v }
 
     private fun sendConfig(paramId: Int, value: Int) {
-        if (_isConnected.value) {
+        if (isConnected.value) {
             btManager.send(ConfigCommand(paramId, value).toFrame())
         }
     }

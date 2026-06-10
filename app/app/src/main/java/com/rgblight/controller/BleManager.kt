@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.rgblight.controller.data.BtDevice
@@ -84,18 +85,20 @@ class BleManager(private val context: Context) {
     // ── Permission check ──
 
     fun hasPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
-                == PackageManager.PERMISSION_GRANTED
-        } else true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val result = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
+            return result == PackageManager.PERMISSION_GRANTED
+        }
+        return true
     }
 
     fun hasFullPermission(): Boolean {
         if (!hasPermission()) return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN)
-                == PackageManager.PERMISSION_GRANTED
-        } else true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val result = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN)
+            return result == PackageManager.PERMISSION_GRANTED
+        }
+        return true
     }
 
     // ── Scanning ──

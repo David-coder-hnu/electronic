@@ -45,7 +45,7 @@ fun ScenePage(vm: MainViewModel) {
         ) {
             Text("场景库", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             TextButton(onClick = { showNewDialog = true }) {
-                Text("+ 新建", color = Accent, fontWeight = FontWeight.Semibold, fontSize = 15.sp)
+                Text("+ 新建", color = Accent, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
         }
 
@@ -79,7 +79,7 @@ fun ScenePage(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { showNewDialog = false },
             containerColor = BgSecondary,
-            title = { Text("保存当前场景", color = TextPrimary, fontWeight = FontWeight.Semibold) },
+            title = { Text("保存当前场景", color = TextPrimary, fontWeight = FontWeight.SemiBold) },
             text = {
                 OutlinedTextField(
                     value = newSceneName,

@@ -115,7 +115,7 @@ fun BluetoothPage(vm: MainViewModel) {
                 Text(
                     if (isScanning) "停止扫描" else "扫描设备",
                     color = Color.White,
-                    fontWeight = FontWeight.Semibold
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -154,7 +154,7 @@ fun BluetoothPage(vm: MainViewModel) {
                         Text(
                             connected?.name ?: "CH9143",
                             color = TextPrimary,
-                            fontWeight = FontWeight.Semibold,
+                            fontWeight = FontWeight.SemiBold,
                             fontSize = 15.sp
                         )
                         Text(
@@ -164,7 +164,7 @@ fun BluetoothPage(vm: MainViewModel) {
                         )
                     }
                     TextButton(onClick = { vm.disconnect() }) {
-                        Text("断开", color = AccentWarm, fontWeight = FontWeight.Semibold)
+                        Text("断开", color = AccentWarm, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -221,7 +221,7 @@ private fun DeviceCard(device: BtDevice, onConnect: () -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = Accent),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            Text("连接", color = Color.White, fontWeight = FontWeight.Semibold)
+            Text("连接", color = Color.White, fontWeight = FontWeight.SemiBold)
         }
     }
 }

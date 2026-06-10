@@ -143,7 +143,7 @@ fun ColorWheelPage(vm: MainViewModel) {
                 ),
                 color = TextPrimary,
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Semibold
+                fontWeight = FontWeight.SemiBold
             )
         }
 
@@ -203,7 +203,7 @@ fun ColorWheelPage(vm: MainViewModel) {
             Text(
                 if (sendFeedback) "已发送 ✓" else "发送颜色",
                 fontSize = 17.sp,
-                fontWeight = FontWeight.Semibold,
+                fontWeight = FontWeight.SemiBold,
                 color = Color.White
             )
         }
@@ -216,7 +216,7 @@ fun ColorWheelPage(vm: MainViewModel) {
 }
 
 @Composable
-private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .weight(1f)
@@ -235,7 +235,7 @@ private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
             label,
             color = if (selected) Accent else TextSecondary,
             fontSize = 15.sp,
-            fontWeight = if (selected) FontWeight.Semibold else FontWeight.Normal
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
         )
     }
 }

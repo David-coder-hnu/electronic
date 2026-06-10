@@ -1,6 +1,6 @@
-// effect_engine_tb.v — Testbench for effect_engine module
-// Tests: static mode, breathing (PWL sin cycle), chasing (dual LED),
-//        mode switching (smooth transition), disconnect fade
+// effect_engine_tb.v — Testbench for effect_engine (WS2812B 8-LED version)
+// Tests: static mode, breathing (PWL sin cycle), chasing (8 LED wave),
+//        mode switching (smooth transition)
 
 `timescale 1ns / 1ps
 
@@ -8,36 +8,33 @@ module effect_engine_tb;
 
     reg        clk;
     reg        rst_n;
-    reg        bt_connected;
     reg  [1:0] cmd_mode;
     reg  [5:0] cmd_r, cmd_g, cmd_b;
     reg        cmd_vld;
-    reg        pwm_tick;
 
-    wire [7:0] duty_led1_r, duty_led1_g, duty_led1_b;
-    wire [7:0] duty_led2_r, duty_led2_g, duty_led2_b;
+    wire [191:0] led_data;
+    wire         update;
+
+    // LED0 color extraction helpers
+    wire [7:0] led0_g = led_data[191:184];
+    wire [7:0] led0_r = led_data[183:176];
+    wire [7:0] led0_b = led_data[175:168];
+    // LED7 color (last in chain)
+    wire [7:0] led7_g = led_data[23:16];
+    wire [7:0] led7_r = led_data[15:8];
+    wire [7:0] led7_b = led_data[7:0];
 
     localparam CLK_PERIOD = 20;  // 50MHz
 
-    effect_engine #(.PWM_WIDTH(8)) dut (
-        .clk(clk), .rst_n(rst_n), .bt_connected(bt_connected),
+    effect_engine dut (
+        .clk(clk), .rst_n(rst_n),
         .cmd_mode(cmd_mode), .cmd_r(cmd_r), .cmd_g(cmd_g), .cmd_b(cmd_b),
-        .cmd_vld(cmd_vld), .pwm_tick(pwm_tick),
-        .duty_led1_r(duty_led1_r), .duty_led1_g(duty_led1_g), .duty_led1_b(duty_led1_b),
-        .duty_led2_r(duty_led2_r), .duty_led2_g(duty_led2_g), .duty_led2_b(duty_led2_b)
+        .cmd_vld(cmd_vld),
+        .led_data(led_data), .update(update)
     );
 
     initial clk = 0;
     always #(CLK_PERIOD/2) clk = ~clk;
-
-    // PWM tick: 200Hz → every 5ms = 250,000 clock cycles
-    // For simulation speed: use shorter period
-    initial pwm_tick = 0;
-    always begin
-        #5000 pwm_tick = 1;  // Pulse
-        #20    pwm_tick = 0;
-        #4980;                // ~5µs period for simulation
-    end
 
     task send_cmd;
         input [1:0] mode;
@@ -55,127 +52,123 @@ module effect_engine_tb;
         end
     endtask
 
-    // TEST 1: Static mode — fixed RGB
+    // Wait for N update pulses (200Hz refresh ticks)
+    task wait_updates;
+        input integer n;
+        integer j;
+        begin
+            for (j = 0; j < n; j = j + 1) begin
+                @(posedge update);
+                #10;  // small delay after pulse
+            end
+        end
+    endtask
+
+    // TEST 1: Static mode — all 8 LEDs same fixed color
     initial begin
-        $display("=== TEST 1: Static mode ===");
-        rst_n = 0; bt_connected = 1'b1;
+        $display("=== TEST 1: Static mode (8 LEDs) ===");
+        rst_n = 0;
         cmd_mode = 0; cmd_r = 0; cmd_g = 0; cmd_b = 0; cmd_vld = 0;
         #200 rst_n = 1;
         #500;
 
         send_cmd(2'b00, 6'h3F, 6'h00, 6'h00);  // Red, full brightness
-        #1000;
-        $display("Static Red: LED1=(%d,%d,%d) LED2=(%d,%d,%d)",
-            duty_led1_r, duty_led1_g, duty_led1_b,
-            duty_led2_r, duty_led2_g, duty_led2_b);
-        if (duty_led1_r > 0 && duty_led1_g == 0 && duty_led1_b == 0)
-            $display("PASS: Static red — LED1_R=%d", duty_led1_r);
-        else $display("FAIL: Expected red, got (%d,%d,%d)", duty_led1_r, duty_led1_g, duty_led1_b);
+        wait_updates(3);
+        $display("Static Red: LED0=(%d,%d,%d) LED7=(%d,%d,%d)",
+            led0_r, led0_g, led0_b, led7_r, led7_g, led7_b);
+        // 6-bit base 0x3F scaled by 0xFF / 64 → ~252
+        if (led0_r > 200 && led0_g == 0 && led0_b == 0)
+            $display("PASS: Static red — LED0_R=%d", led0_r);
+        else $display("FAIL: Expected red, got LED0=(%d,%d,%d)", led0_r, led0_g, led0_b);
+        // All 8 LEDs should be identical in static mode
+        if (led0_r == led7_r && led0_g == led7_g && led0_b == led7_b)
+            $display("PASS: All 8 LEDs identical in static mode");
+        else $display("FAIL: LED0 != LED7 in static mode");
 
         send_cmd(2'b00, 6'h00, 6'h3F, 6'h3F);  // Cyan
-        #1000;
-        if (duty_led1_r == 0 && duty_led1_g > 0 && duty_led1_b > 0)
+        wait_updates(3);
+        if (led0_r == 0 && led0_g > 200 && led0_b > 200)
             $display("PASS: Static cyan");
-        else $display("FAIL: Expected cyan");
+        else $display("FAIL: Expected cyan, got LED0=(%d,%d,%d)", led0_r, led0_g, led0_b);
 
         $display("=== TEST 1 Complete ===\n");
     end
 
-    // TEST 2: Breathing mode — PWL sin cycle
+    // TEST 2: Breathing mode — all 8 LEDs breathe together
     initial begin
-        #50_000;
-        $display("=== TEST 2: Breathing mode (PWL sin) ===");
+        #3_000_000;
+        $display("=== TEST 2: Breathing mode (PWL sin, 8 LEDs) ===");
         send_cmd(2'b01, 6'h3F, 6'h20, 6'h10);  // Warm orange base
-        // Wait a few PWM ticks for breathing to start
-        repeat (50) @(posedge pwm_tick);
-        $display("Breathing duty after 50 PWM ticks: R=%d G=%d B=%d",
-            duty_led1_r, duty_led1_g, duty_led1_b);
-        // Duty should be non-zero (breathing has started)
-        if (duty_led1_r > 0 || duty_led1_g > 0 || duty_led1_b > 0)
+        wait_updates(5);
+        $display("Breathing after 5 updates: LED0=(%d,%d,%d)",
+            led0_r, led0_g, led0_b);
+        if (led0_r > 0 || led0_g > 0 || led0_b > 0)
             $display("PASS: Breathing active — output non-zero");
         else $display("FAIL: Breathing output all zero");
 
-        // Sample a few values to see the breathing curve
-        repeat (20) @(posedge pwm_tick);
-        $display("  t=+20: R=%d G=%d B=%d", duty_led1_r, duty_led1_g, duty_led1_b);
-        repeat (20) @(posedge pwm_tick);
-        $display("  t=+40: R=%d G=%d B=%d", duty_led1_r, duty_led1_g, duty_led1_b);
+        // Sample at different times to see the breathing curve
+        wait_updates(10);
+        $display("  t=+10: LED0=(%d,%d,%d)", led0_r, led0_g, led0_b);
+        wait_updates(10);
+        $display("  t=+20: LED0=(%d,%d,%d)", led0_r, led0_g, led0_b);
+        wait_updates(10);
+        $display("  t=+30: LED0=(%d,%d,%d)", led0_r, led0_g, led0_b);
+
+        // All 8 LEDs should breathe together
+        if (led0_r == led7_r && led0_g == led7_g && led0_b == led7_b)
+            $display("PASS: All 8 LEDs breathing in sync");
+        else $display("WARN: LED0 and LED7 differ during breathing (unexpected)");
 
         $display("=== TEST 2 Complete ===\n");
     end
 
-    // TEST 3: Chasing mode — LED1 and LED2 alternate
+    // TEST 3: Chasing mode — 8 LEDs with phase offsets
     initial begin
-        #200_000;
-        $display("=== TEST 3: Chasing mode ===");
+        #8_000_000;
+        $display("=== TEST 3: Chasing mode (8-LED wave) ===");
         send_cmd(2'b10, 6'h20, 6'h3F, 6'h20);  // Green-ish
-        repeat (30) @(posedge pwm_tick);
-        $display("Chasing: LED1=(%d,%d,%d) LED2=(%d,%d,%d)",
-            duty_led1_r, duty_led1_g, duty_led1_b,
-            duty_led2_r, duty_led2_g, duty_led2_b);
-        // LED1 and LED2 should be different (chasing alternates)
-        if (duty_led1_g != duty_led2_g)
-            $display("PASS: Chasing — LED1 and LED2 differ (alternating)");
-        else $display("WARN: LED1==LED2 at this sample (may be at crossover point)");
+        wait_updates(5);
+        $display("Chasing: LED0=(%d,%d,%d) LED7=(%d,%d,%d)",
+            led0_r, led0_g, led0_b, led7_r, led7_g, led7_b);
+        // LED0 and LED7 should be different (phase offset of 7*2=14 entries)
+        if (led0_g != led7_g)
+            $display("PASS: Chasing — LED0 and LED7 have different brightness");
+        else $display("WARN: LED0==LED7 at this sample (may be at crossover point)");
 
-        repeat (20) @(posedge pwm_tick);
-        $display("  t=+20: LED1=(%d,%d,%d) LED2=(%d,%d,%d)",
-            duty_led1_r, duty_led1_g, duty_led1_b,
-            duty_led2_r, duty_led2_g, duty_led2_b);
+        wait_updates(10);
+        $display("  t=+10: LED0=(%d,%d,%d) LED7=(%d,%d,%d)",
+            led0_r, led0_g, led0_b, led7_r, led7_g, led7_b);
+
+        wait_updates(10);
+        $display("  t=+20: LED0=(%d,%d,%d) LED7=(%d,%d,%d)",
+            led0_r, led0_g, led0_b, led7_r, led7_g, led7_b);
 
         $display("=== TEST 3 Complete ===\n");
     end
 
-    // TEST 4: Mode switching — verify no glitch (duty doesn't go undefined)
+    // TEST 4: Mode switching — verify no glitch
     initial begin
-        #350_000;
+        #15_000_000;
         $display("=== TEST 4: Mode switching ===");
         send_cmd(2'b00, 6'h30, 6'h10, 6'h20);  // Static purple
-        #1000;
-        $display("Static: LED1_R=%d", duty_led1_r);
+        wait_updates(3);
+        $display("Static: LED0_R=%d", led0_r);
 
         send_cmd(2'b01, 6'h30, 6'h10, 6'h20);  // Breathing same color
-        #1000;
-        $display("Switched to breathing: LED1_R=%d", duty_led1_r);
-        if (duty_led1_r !== 8'hxx)
+        wait_updates(3);
+        $display("Switched to breathing: LED0_R=%d", led0_r);
+        if (led0_r !== 8'hxx)
             $display("PASS: Mode switch — no undefined (X) output");
         else $display("FAIL: Mode switch produced X on output");
 
         send_cmd(2'b10, 6'h30, 6'h10, 6'h20);  // Chasing same color
-        #1000;
-        $display("Switched to chasing: LED1_R=%d", duty_led1_r);
-        if (duty_led1_r !== 8'hxx)
+        wait_updates(3);
+        $display("Switched to chasing: LED0_R=%d", led0_r);
+        if (led0_r !== 8'hxx)
             $display("PASS: Mode switch chasing — no X");
         else $display("FAIL: Chasing switch produced X");
 
         $display("=== TEST 4 Complete ===\n");
-    end
-
-    // TEST 5: Disconnect fade
-    initial begin
-        #500_000;
-        $display("=== TEST 5: Disconnect handling ===");
-        send_cmd(2'b00, 6'h3F, 6'h3F, 6'h00);  // Yellow, full
-        #5000;
-
-        // Disconnect
-        bt_connected = 1'b0;
-        $display("BT disconnected — waiting for fade...");
-        repeat (100) @(posedge pwm_tick);
-
-        $display("After fade: LED1=(%d,%d,%d)",
-            duty_led1_r, duty_led1_g, duty_led1_b);
-        if (duty_led1_r < 250)  // Should have decreased from max
-            $display("PASS: Disconnect fade — brightness decreased");
-        else $display("WARN: Disconnect fade may not be complete yet");
-
-        // Reconnect
-        bt_connected = 1'b1;
-        repeat (5) @(posedge pwm_tick);
-        $display("Reconnected: LED1=(%d,%d,%d)",
-            duty_led1_r, duty_led1_g, duty_led1_b);
-
-        $display("=== TEST 5 Complete ===\n");
         $display("=== ALL EFFECT ENGINE TESTS DONE ===");
         $finish;
     end

@@ -17,17 +17,13 @@ set_input_delay -clock clk_50m -min 0.5 [get_ports pmod_a_rx]
 set_input_delay -clock clk_50m -max 10.0 [get_ports rst_n]
 set_input_delay -clock clk_50m -min 0.0  [get_ports rst_n]
 
-# BLESTA status pin from CH9143
-set_input_delay -clock clk_50m -max 5.0 [get_ports pmod_a_blesta]
-set_input_delay -clock clk_50m -min 0.5 [get_ports pmod_a_blesta]
-
 # UART TX to CH9143 (115200 bps = 8.68us per bit — relaxed)
 set_output_delay -clock clk_50m -max 5.0 [get_ports pmod_a_tx]
 set_output_delay -clock clk_50m -min 0.5 [get_ports pmod_a_tx]
 
-# PWM outputs to LED board (200Hz — extremely relaxed)
-set_output_delay -clock clk_50m -max 5.0 [get_ports pmod_b_io*]
-set_output_delay -clock clk_50m -min 0.5 [get_ports pmod_b_io*]
+# WS2812B LED output (~800kHz self-clocked — relaxed)
+set_output_delay -clock clk_50m -max 5.0 [get_ports led_out]
+set_output_delay -clock clk_50m -min 0.5 [get_ports led_out]
 
 # ── Clock uncertainty — use Quartus built-in estimate ──
 # derive_clock_uncertainty reads PLL jitter + board variance from

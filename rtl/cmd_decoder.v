@@ -9,9 +9,6 @@ module cmd_decoder (
     input  wire [7:0] rx_byte,
     input  wire       rx_vld,
 
-    // BLESTA pin from CH9143 — hardware connection status
-    input  wire       blesta,
-
     // Decoded output
     output reg  [1:0] cmd_mode,     // 00=static, 01=breathing, 10=chasing
     output reg  [5:0] cmd_r,
@@ -19,9 +16,8 @@ module cmd_decoder (
     output reg  [5:0] cmd_b,
     output reg        cmd_vld,      // Pulse: valid command received
 
-    // Frame error flags
-    output reg        frame_err,    // Pulse: XOR mismatch or invalid frame
-    output reg        bt_connected  // BLESTA synchronized
+    // Frame error flag
+    output reg        frame_err     // Pulse: XOR mismatch or frame timeout
 );
 
     localparam S_IDLE       = 3'd0;
@@ -40,28 +36,12 @@ module cmd_decoder (
 
     reg [2:0] state;
     reg [7:0] byte_buf [0:4];  // CMD,R,G,B,XOR
-    reg [2:0] byte_cnt;
     reg [7:0] xor_calc;
     reg [19:0] timeout_cnt;
-
-    // BLESTA synchronizer
-    reg blesta_d1, blesta_d2;
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            blesta_d1    <= 1'b0;
-            blesta_d2    <= 1'b0;
-            bt_connected <= 1'b0;
-        end else begin
-            blesta_d1    <= blesta;
-            blesta_d2    <= blesta_d1;
-            bt_connected <= blesta_d2;
-        end
-    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state     <= S_IDLE;
-            byte_cnt  <= 'd0;
             byte_buf[0] <= 8'd0;
             byte_buf[1] <= 8'd0;
             byte_buf[2] <= 8'd0;
@@ -87,7 +67,7 @@ module cmd_decoder (
                     // Timeout — abort partial frame, return to idle
                     state       <= S_IDLE;
                     timeout_cnt <= 20'd0;
-                    frame_err   <= 1'b1;   // Signal the timeout as a frame error
+                    frame_err   <= 1'b1;
                 end else begin
                     timeout_cnt <= timeout_cnt + 1'b1;
                 end
@@ -97,17 +77,14 @@ module cmd_decoder (
 
             case (state)
                 S_IDLE: begin
-                    byte_cnt <= 'd0;
-                    xor_calc <= 8'd0;
-                    state    <= S_WAIT_HEAD;
+                    state <= S_WAIT_HEAD;
                 end
 
                 S_WAIT_HEAD: begin
                     if (rx_vld) begin
                         if (rx_byte == 8'hAA) begin
-                            xor_calc  <= 8'hAA;  // Start XOR accumulator
-                            byte_cnt  <= 'd0;
-                            state     <= S_CMD;
+                            xor_calc <= 8'hAA;     // Start XOR accumulator
+                            state    <= S_CMD;
                         end
                         // else: stay in WAIT_HEAD, slide to find 0xAA
                     end

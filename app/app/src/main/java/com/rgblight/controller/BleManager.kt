@@ -9,7 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.ParcelUuid
+
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.rgblight.controller.data.BtDevice
@@ -105,62 +105,41 @@ class BleManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun startScan() {
-        if (!hasFullPermission()) {
-            _connectionError.value = "缺少蓝牙权限，请授权后重试"
-            return
-        }
-
-        // Check Bluetooth is on — some devices crash if we scan with BT off
-        if (btAdapter?.isEnabled != true) {
-            _connectionError.value = "请先开启蓝牙"
-            return
-        }
-
-        _isScanning.value = true
-        _devices.value = emptyList()
-        _connectionError.value = null
-
-        val scanner = btAdapter?.bluetoothLeScanner ?: run {
-            _isScanning.value = false
-            _connectionError.value = "设备不支持 BLE"
-            return
-        }
-
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .setReportDelay(0)
-            .build()
-
-        // Scan for devices advertising the WCH UART service.
-        // Some BLE chips reject hardware service-UUID filtering → fall back
-        // to no-filter scan if that fails.
-        val filters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(SERVICE_UUID))
-                .build()
-        )
-
         try {
-            scanner.startScan(filters, settings, scanCallback)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Scan start failed: security", e)
-            _isScanning.value = false
-            _connectionError.value = "缺少蓝牙权限"
-        } catch (e: IllegalArgumentException) {
-            // Some devices / BLE chips don't support service-UUID hardware
-            // filtering. Retry with no filter to stay compatible.
-            Log.w(TAG, "Service-UUID filter rejected — retrying without filter", e)
-            try {
-                scanner.startScan(emptyList(), settings, scanCallback)
-            } catch (e2: Exception) {
-                Log.e(TAG, "Unfiltered scan also failed", e2)
-                _isScanning.value = false
-                _connectionError.value = "扫描启动失败"
+            if (!hasFullPermission()) {
+                _connectionError.value = "缺少蓝牙权限，请授权后重试"
+                return
             }
+
+            // Check Bluetooth is on
+            if (btAdapter?.isEnabled != true) {
+                _connectionError.value = "请先开启蓝牙"
+                return
+            }
+
+            _isScanning.value = true
+            _devices.value = emptyList()
+            _connectionError.value = null
+
+            val scanner = btAdapter?.bluetoothLeScanner ?: run {
+                _isScanning.value = false
+                _connectionError.value = "设备不支持 BLE"
+                return
+            }
+
+            val settings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setReportDelay(0)
+                .build()
+
+            // Scan without hardware filter — many Chinese BLE chips (Xiaomi,
+            // Huawei, OPPO, VIVO) crash on ParcelUuid in ScanFilter. Software
+            // filtering in onScanResult is safe and universally compatible.
+            scanner.startScan(emptyList(), settings, scanCallback)
         } catch (e: Exception) {
-            Log.e(TAG, "Scan start failed", e)
+            Log.e(TAG, "startScan crashed", e)
             _isScanning.value = false
-            _connectionError.value = "扫描启动失败: ${e.message}"
+            _connectionError.value = "扫描启动失败"
         }
     }
 

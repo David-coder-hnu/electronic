@@ -46,7 +46,12 @@ fun BluetoothPage(vm: MainViewModel) {
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        hasBlePermission = grants.values.all { it }
+        val granted = grants.values.all { it }
+        hasBlePermission = granted
+        if (granted) {
+            // Auto-start scan after user grants permission
+            vm.startScan()
+        }
     }
 
     fun requestAndScan() {

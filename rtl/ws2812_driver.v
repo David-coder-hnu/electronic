@@ -13,14 +13,15 @@ module ws2812_driver (
 );
 
     // ─── WS2812B timing at 50MHz (20ns/cycle) ───
-    // T0H=0.4µs±150ns → 18cyc(0.36µs)  ✓ in range
-    // T0L=0.85µs±150ns→ 45cyc(0.90µs)  ✓ in range
-    // T1H=0.8µs±150ns → 35cyc(0.70µs)  ✓ in range
-    // T1L=0.45µs±150ns→ 28cyc(0.56µs)  ✓ in range
-    // RESET >50µs      → 3000cyc(60µs)  ✓ above minimum
+    // Nominal values centered for best tolerance margin:
+    // T0H=0.40µs → 20cyc(0.40µs) ✓ spec 0.25–0.55µs
+    // T0L=0.85µs → 43cyc(0.86µs) ✓ spec 0.70–1.00µs
+    // T1H=0.80µs → 40cyc(0.80µs) ✓ spec 0.65–0.95µs
+    // T1L=0.45µs → 23cyc(0.46µs) ✓ spec 0.30–0.60µs
+    // RESET >50µs → 3000cyc(60µs) ✓ above minimum
     localparam BIT_TOTAL    = 7'd63;     // 63 cycles per bit (1.26µs)
-    localparam T0H          = 7'd18;     // 0-code high pulse (0.36µs)
-    localparam T1H          = 7'd35;     // 1-code high pulse (0.70µs)
+    localparam T0H          = 7'd20;     // 0-code high pulse (0.40µs, nominal)
+    localparam T1H          = 7'd40;     // 1-code high pulse (0.80µs, nominal)
     localparam RESET_CYCLES = 12'd3000;  // reset low (60µs)
 
     localparam S_IDLE  = 2'd0;

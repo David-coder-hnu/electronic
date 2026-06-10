@@ -29,12 +29,11 @@ module effect_engine (
     localparam MODE_CHASING   = 2'b10;
 
     // Refresh rate: 50MHz / 250000 ≈ 200Hz
-    // Frame TX + reset ≈ 302µs, so driver is idle ~94% of the time.
     localparam REFRESH_MAX = 18'd250000;
 
     reg [1:0]  cur_mode;
     reg [5:0]  base_r, base_g, base_b;
-    reg [15:0] phase;               // Shared phase accumulator (breathing + chasing)
+    reg [15:0] phase;
     reg [17:0] refresh_cnt;
     reg        refresh_tick;
 
@@ -75,21 +74,38 @@ module effect_engine (
         end
     end
 
-    // ─── Scale: (base * factor) / 64 → 8-bit duty ───
+    // ─── Scale: (base[5:0] * factor[7:0]) / 64 → 8-bit duty ───
     function [7:0] scale;
-        input [5:0] base;       // 6-bit color (0–63)
-        input [7:0] factor;     // 8-bit factor (0–255)
+        input [5:0] base;
+        input [7:0] factor;
         reg [13:0] product;
         begin
             product = {2'b0, base} * factor;
-            scale   = product[13:6];     // Divide by 64
+            scale   = product[13:6];
         end
     endfunction
 
-    // ─── Main logic ───
-    integer i;
-    reg [3:0] led_phase;     // Phase index for each LED
+    // ─── Chasing sin values: each LED offset by 2 LUT entries (π/8 apart) ───
+    wire [7:0] chase_sin0 = sin_lut[(phase_idx + 4'd0)  & 4'hF];
+    wire [7:0] chase_sin1 = sin_lut[(phase_idx + 4'd2)  & 4'hF];
+    wire [7:0] chase_sin2 = sin_lut[(phase_idx + 4'd4)  & 4'hF];
+    wire [7:0] chase_sin3 = sin_lut[(phase_idx + 4'd6)  & 4'hF];
+    wire [7:0] chase_sin4 = sin_lut[(phase_idx + 4'd8)  & 4'hF];
+    wire [7:0] chase_sin5 = sin_lut[(phase_idx + 4'd10) & 4'hF];
+    wire [7:0] chase_sin6 = sin_lut[(phase_idx + 4'd12) & 4'hF];
+    wire [7:0] chase_sin7 = sin_lut[(phase_idx + 4'd14) & 4'hF];
 
+    // ─── Per-LED duty registers ───
+    reg [7:0] g0, r0, b0;
+    reg [7:0] g1, r1, b1;
+    reg [7:0] g2, r2, b2;
+    reg [7:0] g3, r3, b3;
+    reg [7:0] g4, r4, b4;
+    reg [7:0] g5, r5, b5;
+    reg [7:0] g6, r6, b6;
+    reg [7:0] g7, r7, b7;
+
+    // ─── Main logic ───
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cur_mode <= MODE_STATIC;
@@ -97,8 +113,15 @@ module effect_engine (
             base_g   <= 6'h3F;
             base_b   <= 6'h3F;
             phase    <= 16'd0;
-            led_data <= 192'd0;
             update   <= 1'b0;
+            {g0,r0,b0} <= 24'd0;
+            {g1,r1,b1} <= 24'd0;
+            {g2,r2,b2} <= 24'd0;
+            {g3,r3,b3} <= 24'd0;
+            {g4,r4,b4} <= 24'd0;
+            {g5,r5,b5} <= 24'd0;
+            {g6,r6,b6} <= 24'd0;
+            {g7,r7,b7} <= 24'd0;
         end else begin
             update <= 1'b0;
 
@@ -116,54 +139,60 @@ module effect_engine (
 
                 case (cur_mode)
                     MODE_STATIC: begin
-                        for (i = 0; i < 8; i = i + 1) begin
-                            // All LEDs same color, full brightness
-                            // LED0 at MSB [191:168], LED7 at LSB [23:0]
-                            led_data[(7-i)*24 +: 24] <= {
-                                scale(base_g, 8'hFF),
-                                scale(base_r, 8'hFF),
-                                scale(base_b, 8'hFF)
-                            };
-                        end
+                        r0 <= scale(base_r, 8'hFF); g0 <= scale(base_g, 8'hFF); b0 <= scale(base_b, 8'hFF);
+                        r1 <= scale(base_r, 8'hFF); g1 <= scale(base_g, 8'hFF); b1 <= scale(base_b, 8'hFF);
+                        r2 <= scale(base_r, 8'hFF); g2 <= scale(base_g, 8'hFF); b2 <= scale(base_b, 8'hFF);
+                        r3 <= scale(base_r, 8'hFF); g3 <= scale(base_g, 8'hFF); b3 <= scale(base_b, 8'hFF);
+                        r4 <= scale(base_r, 8'hFF); g4 <= scale(base_g, 8'hFF); b4 <= scale(base_b, 8'hFF);
+                        r5 <= scale(base_r, 8'hFF); g5 <= scale(base_g, 8'hFF); b5 <= scale(base_b, 8'hFF);
+                        r6 <= scale(base_r, 8'hFF); g6 <= scale(base_g, 8'hFF); b6 <= scale(base_b, 8'hFF);
+                        r7 <= scale(base_r, 8'hFF); g7 <= scale(base_g, 8'hFF); b7 <= scale(base_b, 8'hFF);
                     end
 
                     MODE_BREATHING: begin
-                        for (i = 0; i < 8; i = i + 1) begin
-                            // All LEDs breathe together
-                            led_data[(7-i)*24 +: 24] <= {
-                                scale(base_g, sin_lut[phase_idx]),
-                                scale(base_r, sin_lut[phase_idx]),
-                                scale(base_b, sin_lut[phase_idx])
-                            };
-                        end
+                        r0 <= scale(base_r, sin_lut[phase_idx]); g0 <= scale(base_g, sin_lut[phase_idx]); b0 <= scale(base_b, sin_lut[phase_idx]);
+                        r1 <= scale(base_r, sin_lut[phase_idx]); g1 <= scale(base_g, sin_lut[phase_idx]); b1 <= scale(base_b, sin_lut[phase_idx]);
+                        r2 <= scale(base_r, sin_lut[phase_idx]); g2 <= scale(base_g, sin_lut[phase_idx]); b2 <= scale(base_b, sin_lut[phase_idx]);
+                        r3 <= scale(base_r, sin_lut[phase_idx]); g3 <= scale(base_g, sin_lut[phase_idx]); b3 <= scale(base_b, sin_lut[phase_idx]);
+                        r4 <= scale(base_r, sin_lut[phase_idx]); g4 <= scale(base_g, sin_lut[phase_idx]); b4 <= scale(base_b, sin_lut[phase_idx]);
+                        r5 <= scale(base_r, sin_lut[phase_idx]); g5 <= scale(base_g, sin_lut[phase_idx]); b5 <= scale(base_b, sin_lut[phase_idx]);
+                        r6 <= scale(base_r, sin_lut[phase_idx]); g6 <= scale(base_g, sin_lut[phase_idx]); b6 <= scale(base_b, sin_lut[phase_idx]);
+                        r7 <= scale(base_r, sin_lut[phase_idx]); g7 <= scale(base_g, sin_lut[phase_idx]); b7 <= scale(base_b, sin_lut[phase_idx]);
                     end
 
                     MODE_CHASING: begin
-                        for (i = 0; i < 8; i = i + 1) begin
-                            // Each LED offset by 2 LUT entries (π/8 per LED)
-                            led_phase = (phase_idx + (i * 2)) & 4'hF;
-                            led_data[(7-i)*24 +: 24] <= {
-                                scale(base_g, sin_lut[led_phase]),
-                                scale(base_r, sin_lut[led_phase]),
-                                scale(base_b, sin_lut[led_phase])
-                            };
-                        end
+                        r0 <= scale(base_r, chase_sin0); g0 <= scale(base_g, chase_sin0); b0 <= scale(base_b, chase_sin0);
+                        r1 <= scale(base_r, chase_sin1); g1 <= scale(base_g, chase_sin1); b1 <= scale(base_b, chase_sin1);
+                        r2 <= scale(base_r, chase_sin2); g2 <= scale(base_g, chase_sin2); b2 <= scale(base_b, chase_sin2);
+                        r3 <= scale(base_r, chase_sin3); g3 <= scale(base_g, chase_sin3); b3 <= scale(base_b, chase_sin3);
+                        r4 <= scale(base_r, chase_sin4); g4 <= scale(base_g, chase_sin4); b4 <= scale(base_b, chase_sin4);
+                        r5 <= scale(base_r, chase_sin5); g5 <= scale(base_g, chase_sin5); b5 <= scale(base_b, chase_sin5);
+                        r6 <= scale(base_r, chase_sin6); g6 <= scale(base_g, chase_sin6); b6 <= scale(base_b, chase_sin6);
+                        r7 <= scale(base_r, chase_sin7); g7 <= scale(base_g, chase_sin7); b7 <= scale(base_b, chase_sin7);
                     end
 
                     default: begin
-                        for (i = 0; i < 8; i = i + 1) begin
-                            led_data[(7-i)*24 +: 24] <= {
-                                scale(base_g, 8'hFF),
-                                scale(base_r, 8'hFF),
-                                scale(base_b, 8'hFF)
-                            };
-                        end
+                        r0 <= scale(base_r, 8'hFF); g0 <= scale(base_g, 8'hFF); b0 <= scale(base_b, 8'hFF);
+                        r1 <= scale(base_r, 8'hFF); g1 <= scale(base_g, 8'hFF); b1 <= scale(base_b, 8'hFF);
+                        r2 <= scale(base_r, 8'hFF); g2 <= scale(base_g, 8'hFF); b2 <= scale(base_b, 8'hFF);
+                        r3 <= scale(base_r, 8'hFF); g3 <= scale(base_g, 8'hFF); b3 <= scale(base_b, 8'hFF);
+                        r4 <= scale(base_r, 8'hFF); g4 <= scale(base_g, 8'hFF); b4 <= scale(base_b, 8'hFF);
+                        r5 <= scale(base_r, 8'hFF); g5 <= scale(base_g, 8'hFF); b5 <= scale(base_b, 8'hFF);
+                        r6 <= scale(base_r, 8'hFF); g6 <= scale(base_g, 8'hFF); b6 <= scale(base_b, 8'hFF);
+                        r7 <= scale(base_r, 8'hFF); g7 <= scale(base_g, 8'hFF); b7 <= scale(base_b, 8'hFF);
                     end
                 endcase
 
                 update <= 1'b1;
             end
         end
+    end
+
+    // ─── Assemble 192-bit led_data (combinational, LED0 at MSB) ───
+    // GRB per LED: {G[7:0], R[7:0], B[7:0]}
+    always @(*) begin
+        led_data = {g0, r0, b0, g1, r1, b1, g2, r2, b2, g3, r3, b3,
+                    g4, r4, b4, g5, r5, b5, g6, r6, b6, g7, r7, b7};
     end
 
 endmodule

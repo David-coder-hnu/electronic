@@ -225,6 +225,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Bluetooth actions ──
 
+    /** Load paired devices from system (no scan — safe on all phones). */
+    fun loadPairedDevices() = btManager.loadPairedDevices()
+    /** Connect directly by MAC address. */
+    fun connectByAddress(address: String) = btManager.connectByAddress(address)
+    /** One-tap reconnect to last-known device. */
+    fun reconnectLast() = btManager.reconnectLast()
+    /** Last successfully connected MAC (null if never connected). */
+    val lastMac: String? get() = btManager.lastMac
+
     fun startScan() = btManager.startScan()
     fun stopScan() = btManager.stopScan()
     fun connect(device: BtDevice) = btManager.connect(device)

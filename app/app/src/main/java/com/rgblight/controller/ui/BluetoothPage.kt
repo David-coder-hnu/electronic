@@ -35,17 +35,23 @@ fun BluetoothPage(vm: MainViewModel) {
     val connectionError by vm.connectionError.collectAsState()
     val context = LocalContext.current
 
-    // Permission launcher for Android 12+
+    // Permission check — API-level aware
     var hasBlePermission by remember {
         mutableStateOf(
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     android.content.pm.PackageManager.PERMISSION_GRANTED ==
                         context.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
-                else true
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // Android 10-11: BLE scan requires ACCESS_FINE_LOCATION at runtime
+                    android.content.pm.PackageManager.PERMISSION_GRANTED ==
+                        context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                } else {
+                    true // Android 9 and below
+                }
             } catch (e: Throwable) {
                 Log.e("BluetoothPage", "permission check crashed", e)
-                false // assume no permission, will request it
+                false
             }
         )
     }
@@ -73,7 +79,13 @@ fun BluetoothPage(vm: MainViewModel) {
                         Manifest.permission.BLUETOOTH_SCAN,
                         Manifest.permission.BLUETOOTH_CONNECT
                     ))
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // Android 10-11: must request location permission
+                    permLauncher.launch(arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ))
                 }
+                // Android 9 and below — manifest permission is enough, just try
             }
         } catch (e: Throwable) {
             Log.e("BluetoothPage", "requestAndScan crashed", e)

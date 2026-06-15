@@ -117,6 +117,12 @@ class BleManager(private val context: Context) {
                 return
             }
 
+            // Force-stop any lingering scan before starting a new one.
+            // Some OEM BLE stacks (Xiaomi HyperOS, Huawei HarmonyOS) crash
+            // at the native level when startScan overlaps a previous scan
+            // that hasn't fully torn down yet.
+            try { btAdapter?.bluetoothLeScanner?.stopScan(scanCallback) } catch (_: Throwable) {}
+
             _isScanning.value = true
             _devices.value = emptyList()
             _connectionError.value = null
@@ -127,14 +133,18 @@ class BleManager(private val context: Context) {
                 return
             }
 
+            // Minimal ScanSettings — NO setReportDelay(0) and NO LOW_LATENCY.
+            // The aggressive combination is the #1 trigger of native BLE HAL
+            // crashes (SIGSEGV) on Chinese-ROM devices (Xiaomi/Huawei/OPPO/VIVO).
+            // SCAN_MODE_BALANCED with default report delay is universally safe
+            // and more than fast enough for an LED controller.
             val settings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .setReportDelay(0)
+                .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                 .build()
 
-            // Scan without hardware filter — many Chinese BLE chips (Xiaomi,
-            // Huawei, OPPO, VIVO) crash on ParcelUuid in ScanFilter. Software
-            // filtering in onScanResult is safe and universally compatible.
+            // Scan without hardware filter — many Chinese BLE chips crash on
+            // ParcelUuid in ScanFilter. Software filtering in onScanResult is
+            // safe and universally compatible.
             scanner.startScan(emptyList(), settings, scanCallback)
         } catch (e: Throwable) {
             // Catch Throwable not Exception — some BLE stacks throw Error
@@ -222,6 +232,11 @@ class BleManager(private val context: Context) {
 
     // ── Internals ──
 
+    /** Safe fallback device name when getName() throws. */
+    private fun fallbackName(dev: BluetoothDevice): String {
+        return try { "CH9143-${dev.address.takeLast(6)}" } catch (_: Throwable) { "CH9143" }
+    }
+
     private fun cancelTimeout() {
         connectTimeout?.let { handler.removeCallbacks(it) }
         connectTimeout = null
@@ -263,17 +278,28 @@ class BleManager(private val context: Context) {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             try {
                 val dev = result.device ?: return
-                val name = dev.name ?: "CH9143-${dev.address.takeLast(6)}"
-                val existing = _devices.value.find { it.address == dev.address }
+                // getName() / getAddress() are hidden Binder IPC calls that
+                // can SIGSEGV on OEM ROMs with malformed remote responses.
+                val name: String = try {
+                    dev.name ?: fallbackName(dev)
+                } catch (_: Throwable) { fallbackName(dev) }
+                val addr: String = try {
+                    dev.address
+                } catch (_: Throwable) { "00:00:00:00:00:00" }
+                val rssi: Int = try {
+                    result.rssi
+                } catch (_: Throwable) { -100 }
+
+                val existing = _devices.value.find { it.address == addr }
                 if (existing == null) {
                     _devices.value = _devices.value + BtDevice(
                         name = name,
-                        address = dev.address,
-                        rssi = result.rssi
+                        address = addr,
+                        rssi = rssi
                     )
                 } else {
                     _devices.value = _devices.value.map {
-                        if (it.address == dev.address) it.copy(rssi = result.rssi) else it
+                        if (it.address == addr) it.copy(rssi = rssi) else it
                     }
                 }
             } catch (_: Throwable) {

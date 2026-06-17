@@ -61,6 +61,7 @@ class BleManager(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private var connectTimeout: Runnable? = null
     private var reconnectAttempts = 0
+    private var connecting = false
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -87,6 +88,11 @@ class BleManager(private val context: Context) {
         get() = prefs.getString(KEY_LAST_ADDR, null)
 
     var autoReconnect: Boolean = true
+
+    /** Report a connection error to the UI (public setter). */
+    fun reportError(msg: String) {
+        _connectionError.value = msg
+    }
 
     // ── Permission ──
 
@@ -161,7 +167,12 @@ class BleManager(private val context: Context) {
             _connectionError.value = "缺少蓝牙权限"
             return
         }
+        if (connecting) {
+            Log.w(TAG, "Connection already in progress, ignoring")
+            return
+        }
         disconnectGatt()
+        connecting = true
 
         val device: BluetoothDevice? = try {
             btAdapter?.getRemoteDevice(address)
@@ -183,6 +194,7 @@ class BleManager(private val context: Context) {
         cancelTimeout()
         connectTimeout = Runnable {
             Log.e(TAG, "Connection timeout")
+            connecting = false
             _connectionError.value = "连接超时，请重试"
             disconnectGatt()
         }
@@ -206,7 +218,9 @@ class BleManager(private val context: Context) {
     fun disconnect() {
         Log.d(TAG, "User-requested disconnect")
         cancelTimeout()
+        handler.removeCallbacksAndMessages(null)  // Clear all pending callbacks
         reconnectAttempts = 0
+        connecting = false
         autoReconnect = false
         disconnectGatt()
     }
@@ -214,19 +228,26 @@ class BleManager(private val context: Context) {
     // ── Data send ──
 
     @SuppressLint("MissingPermission")
-    fun send(data: ByteArray) {
+    fun send(data: ByteArray): Boolean {
         if (!_isConnected.value) {
             Log.w(TAG, "send() called while disconnected")
-            return
+            return false
         }
-        rxChar?.let { char ->
-            char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            @Suppress("DEPRECATION")
-            char.value = data
-            @Suppress("DEPRECATION")
-            val ok = btGatt?.writeCharacteristic(char) ?: false
-            if (!ok) Log.e(TAG, "writeCharacteristic returned false")
-        } ?: Log.e(TAG, "rxChar is null — cannot send")
+        val char = rxChar
+        if (char == null) {
+            Log.e(TAG, "rxChar is null — cannot send")
+            return false
+        }
+        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        @Suppress("DEPRECATION")
+        char.value = data
+        @Suppress("DEPRECATION")
+        val ok = btGatt?.writeCharacteristic(char) ?: false
+        if (!ok) {
+            Log.e(TAG, "writeCharacteristic returned false")
+            return false
+        }
+        return true
     }
 
     fun close() {
@@ -361,6 +382,7 @@ class BleManager(private val context: Context) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 handler.post {
                     cancelTimeout()
+                    connecting = false
                     _isConnected.value = false
                     _connectionError.value = "连接失败 (status=$status)"
                     tryReconnect()
@@ -390,14 +412,14 @@ class BleManager(private val context: Context) {
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 handler.post {
-                    cancelTimeout(); _connectionError.value = "服务发现失败"; disconnectGatt()
+                    cancelTimeout(); connecting = false; _connectionError.value = "服务发现失败"; disconnectGatt()
                 }
                 return
             }
             val service = gatt.getService(SERVICE_UUID)
             if (service == null) {
                 handler.post {
-                    cancelTimeout(); _connectionError.value = "未找到 CH9143 串口服务\n请确认连接的是正确的设备"; disconnectGatt()
+                    cancelTimeout(); connecting = false; _connectionError.value = "未找到 CH9143 串口服务\n请确认连接的是正确的设备"; disconnectGatt()
                 }
                 return
             }
@@ -405,7 +427,7 @@ class BleManager(private val context: Context) {
             rxChar = service.getCharacteristic(CHAR_UART_UUID)
             if (txChar == null || rxChar == null) {
                 handler.post {
-                    cancelTimeout(); _connectionError.value = "CH9143 特征值缺失"; disconnectGatt()
+                    cancelTimeout(); connecting = false; _connectionError.value = "CH9143 特征值缺失"; disconnectGatt()
                 }
                 return
             }
@@ -422,7 +444,7 @@ class BleManager(private val context: Context) {
             val addr = gatt.device.address
             prefs.edit().putString(KEY_LAST_ADDR, addr).apply()
             handler.post {
-                cancelTimeout(); reconnectAttempts = 0
+                cancelTimeout(); reconnectAttempts = 0; connecting = false
                 _isConnected.value = true; _connectionError.value = null
                 Log.d(TAG, "CH9143 BLE UART ready ✓  ($addr)")
             }

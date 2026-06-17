@@ -177,7 +177,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun sendConfig(paramId: Int, value: Int) {
         if (isConnected.value) {
-            btManager.send(ConfigCommand(paramId, value).toFrame())
+            val ok = btManager.send(ConfigCommand(paramId, value).toFrame())
+            if (!ok) {
+                btManager.reportError("配置发送失败，请检查蓝牙连接")
+            }
         }
     }
 
@@ -189,7 +192,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val g6 = ((rgb.value.g * scale) * 63).toInt().coerceIn(0, 63)
         val b6 = ((rgb.value.b * scale) * 63).toInt().coerceIn(0, 63)
         val cmd = LightCommand(mode = _mode.value, r = r6, g = g6, b = b6)
-        btManager.send(cmd.toFrame())
+        val ok = btManager.send(cmd.toFrame())
+        if (!ok) {
+            btManager.reportError("发送失败，请检查蓝牙连接")
+            return
+        }
 
         _lastSentHex.value = String.format(
             "#%02X%02X%02X",
@@ -206,7 +213,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val g6 = ((scene.g / 63f * scale) * 63).toInt().coerceIn(0, 63)
         val b6 = ((scene.b / 63f * scale) * 63).toInt().coerceIn(0, 63)
         val cmd = LightCommand(mode = scene.mode, r = r6, g = g6, b = b6)
-        btManager.send(cmd.toFrame())
+        val ok = btManager.send(cmd.toFrame())
+        if (!ok) {
+            btManager.reportError("发送失败，请检查蓝牙连接")
+            return
+        }
 
         _mode.value = scene.mode
         _brightness.value = scene.brightness

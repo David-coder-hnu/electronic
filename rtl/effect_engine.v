@@ -19,6 +19,11 @@ module effect_engine (
     input  wire [5:0]   cmd_b,
     input  wire         cmd_vld,
 
+    // Config input (from cmd_decoder — 0xAC frames)
+    input  wire [1:0]   cfg_id,      // 0=breath, 1=chase, 2=max bright
+    input  wire [15:0]  cfg_value,
+    input  wire         cfg_vld,
+
     // WS2812B output — 192 bits for 8 LEDs
     output reg  [191:0] led_data,
     output reg          update        // Pulse: new frame ready for ws2812_driver
@@ -36,6 +41,19 @@ module effect_engine (
     reg [15:0] phase;
     reg [17:0] refresh_cnt;
     reg        refresh_tick;
+
+    // ─── Configurable parameters (updated via 0xAC frames) ───
+    // Defaults match design spec: breath 3.0s, chase 2.0s, brightness 100%
+    reg [15:0] breath_period;      // APP sends value*10, e.g. 30 = 3.0s
+    reg [15:0] chase_speed;        // APP sends value*10, e.g. 20 = 2.0s
+    reg [7:0]  max_brightness;     // 10..100 (percentage)
+
+    // Phase increment = 3277 / period_val (integer division)
+    // For default breath_period=30: 3277/30 ≈ 109 cycles → ~3s period
+    wire [15:0] phase_inc;
+    assign phase_inc = (cur_mode == MODE_CHASING)
+        ? (16'd3277 / chase_speed)   // Chasing uses chase_speed
+        : (16'd3277 / breath_period); // Breathing uses breath_period
 
     // ─── 16-entry sin LUT (8-bit, piecewise linear approximation) ───
     wire [7:0] sin_lut [0:15];
@@ -74,14 +92,18 @@ module effect_engine (
         end
     end
 
-    // ─── Scale: (base[5:0] * factor[7:0]) / 64 → 8-bit duty ───
+    // ─── Scale: (base[5:0] * factor[7:0]) / 64 * (max_brightness/100) → 8-bit duty ───
+    // duty_8b = (base * factor / 64) * max_brightness / 100
+    // Approximation: /100 ≈ *655 >> 16  (655/65536 = 0.009994 ≈ 1/100.05, <0.05% error)
     function [7:0] scale;
         input [5:0] base;
         input [7:0] factor;
         reg [13:0] product;
+        reg [23:0] bright_product;
         begin
-            product = {2'b0, base} * factor;
-            scale   = product[13:6];
+            product        = {2'b0, base} * factor;
+            bright_product = {8'b0, product[13:6]} * max_brightness * 16'd655;
+            scale          = bright_product[23:16];
         end
     endfunction
 
@@ -108,12 +130,15 @@ module effect_engine (
     // ─── Main logic ───
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            cur_mode <= MODE_STATIC;
-            base_r   <= 6'h3F;
-            base_g   <= 6'h3F;
-            base_b   <= 6'h3F;
-            phase    <= 16'd0;
-            update   <= 1'b0;
+            cur_mode       <= MODE_STATIC;
+            base_r         <= 6'h3F;
+            base_g         <= 6'h3F;
+            base_b         <= 6'h3F;
+            phase          <= 16'd0;
+            update         <= 1'b0;
+            breath_period  <= 16'd30;    // Default 3.0s
+            chase_speed    <= 16'd20;    // Default 2.0s
+            max_brightness <= 8'd100;    // Default 100%
             {g0,r0,b0} <= 24'd0;
             {g1,r1,b1} <= 24'd0;
             {g2,r2,b2} <= 24'd0;
@@ -125,7 +150,7 @@ module effect_engine (
         end else begin
             update <= 1'b0;
 
-            // Latch new command
+            // Latch new light command
             if (cmd_vld) begin
                 cur_mode <= cmd_mode;
                 base_r   <= cmd_r;
@@ -133,9 +158,18 @@ module effect_engine (
                 base_b   <= cmd_b;
             end
 
+            // Latch new config from 0xAC frame
+            if (cfg_vld) begin
+                case (cfg_id)
+                    2'd0: breath_period  <= cfg_value;   // ×10, e.g. 30=3.0s
+                    2'd1: chase_speed    <= cfg_value;   // ×10, e.g. 20=2.0s
+                    2'd2: max_brightness <= cfg_value[7:0]; // 10..100
+                endcase
+            end
+
             // Refresh: update phase → recompute all 8 LEDs → fire update
             if (refresh_tick) begin
-                phase <= phase + 16'd109;   // ~3s period for breathing
+                phase <= phase + phase_inc;   // Configurable period
 
                 case (cur_mode)
                     MODE_STATIC: begin

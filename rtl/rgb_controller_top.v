@@ -31,6 +31,11 @@ module rgb_controller_top (
     wire       cmd_vld;
     wire       frame_err;
 
+    // CMD Decoder → Effect Engine (0xAC config)
+    wire [1:0] cfg_id;
+    wire [15:0] cfg_value;
+    wire       cfg_vld;
+
     // Effect Engine → WS2812B Driver
     wire [191:0] led_data;
     wire         update;
@@ -42,6 +47,7 @@ module rgb_controller_top (
 
     reg  [2:0] tx_frm_idx;          // 0-5 byte index within frame
     reg        tx_frm_active;        // Frame transmission in progress
+    reg        tx_pending;           // cmd_vld received, wait 1 cycle before start
     reg  [7:0] frm_status;          // Captured STATUS byte
     reg  [7:0] frm_r, frm_g, frm_b; // Captured duty values (top 6 bits)
     reg  [7:0] frm_xor;             // Running XOR accumulator
@@ -79,6 +85,7 @@ module rgb_controller_top (
     always @(posedge clk_50m or negedge rst_n) begin
         if (!rst_n) begin
             tx_frm_active <= 1'b0;
+            tx_pending    <= 1'b0;
             tx_frm_idx    <= 3'd0;
             frm_status    <= 8'd0;
             frm_r         <= 8'd0;
@@ -87,7 +94,8 @@ module rgb_controller_top (
             frm_xor       <= 8'd0;
         end else begin
             if (cmd_vld) begin
-                // Capture current state and start frame
+                // Capture current state, defer tx start by 1 cycle
+                // (avoids race: tx_start && cmd_vld in same cycle)
                 frm_status    <= {cmd_mode, 6'd0};
                 frm_r         <= {led0_r_6b, 2'b00};
                 frm_g         <= {led0_g_6b, 2'b00};
@@ -97,8 +105,13 @@ module rgb_controller_top (
                                ^ {led0_r_6b, 2'b00}
                                ^ {led0_g_6b, 2'b00}
                                ^ {led0_b_6b, 2'b00};
-                tx_frm_active <= 1'b1;
+                tx_frm_active <= 1'b0;
                 tx_frm_idx    <= 3'd0;
+                tx_pending    <= 1'b1;
+            end else if (tx_pending && !tx_busy) begin
+                // One cycle after cmd_vld: start actual transmission
+                tx_frm_active <= 1'b1;
+                tx_pending    <= 1'b0;
             end else if (tx_start) begin
                 // Byte transmitted — advance to next byte
                 if (tx_frm_idx == 3'd5) begin
@@ -126,7 +139,7 @@ module rgb_controller_top (
         .rx_err  (rx_err)
     );
 
-    // Command Decoder (0xAA frame sync, XOR checksum)
+    // Command Decoder (0xAA frame sync + 0xAC config parsing)
     cmd_decoder u_cmd_dec (
         .clk      (clk_50m),
         .rst_n    (rst_n),
@@ -137,6 +150,9 @@ module rgb_controller_top (
         .cmd_g    (cmd_g),
         .cmd_b    (cmd_b),
         .cmd_vld  (cmd_vld),
+        .cfg_id   (cfg_id),
+        .cfg_value(cfg_value),
+        .cfg_vld  (cfg_vld),
         .frame_err(frame_err)
     );
 
@@ -149,6 +165,9 @@ module rgb_controller_top (
         .cmd_g    (cmd_g),
         .cmd_b    (cmd_b),
         .cmd_vld  (cmd_vld),
+        .cfg_id   (cfg_id),
+        .cfg_value(cfg_value),
+        .cfg_vld  (cfg_vld),
         .led_data (led_data),
         .update   (update)
     );
